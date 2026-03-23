@@ -38,6 +38,71 @@ Praxis does not own: general memory (Elephas), preference persistence (Taste), p
 Praxis receives BehavioralSignal files from Corvus. Praxis decides whether to act on each signal.
 
 
+
+## Functions
+
+### praxis_event_record()
+
+**Purpose:** record a completed event or outcome with evidence
+
+**Returns:** Operation result
+
+### praxis_lesson_extract()
+
+**Purpose:** derive micro-lessons from recorded events
+
+**Returns:** Operation result
+
+### praxis_shift_propose()
+
+**Purpose:** propose a new behavior shift from lessons
+
+**Returns:** Operation result
+
+### praxis_shift_list()
+
+**Purpose:** list all shifts with status
+
+**Returns:** Operation result
+
+### praxis_shift_activate()
+
+**Purpose:** activate a proposed shift (enforces cap)
+
+**Returns:** Operation result
+
+### praxis_shift_expire()
+
+**Purpose:** expire or reject a shift with reason
+
+**Returns:** Operation result
+
+### praxis_runtime_brief()
+
+**Purpose:** generate runtime brief with active shifts only
+
+**Returns:** Operation result
+
+### praxis_debrief_generate()
+
+**Purpose:** produce a plain-language debrief
+
+**Returns:** Operation result
+
+### praxis_status()
+
+**Purpose:** event count, active shifts, cap usage, last debrief
+
+**Returns:** Operation result
+
+### praxis_journal()
+
+**Purpose:** write journal for the current run; called at end of every run
+
+**Returns:** Operation result
+
+
+
 ## Commands
 
 - `praxis.event.record` — record a completed event or outcome with evidence
