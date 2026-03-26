@@ -1,40 +1,58 @@
 # 🔄 Praxis
 
-Bounded behavioral refinement loop with lessons, shifts, and debriefs.
-
-**Skill name:** `ocas-praxis`
-**Version:** 2.2.0
-**Type:** system
-**Layer:** Execution
-**Author:** Indigo Karasu
+Praxis is the system's behavioral self-improvement loop -- it records real task outcomes, waits for patterns to emerge across multiple events, and then consolidates validated lessons into a small capped set of active behavior shifts that influence every future run. The cap of 12 active shifts is a hard constraint that prevents unbounded rule accumulation, and every shift must trace back to recorded events so nothing changes without an auditable reason.
 
 ---
 
-## Files
+## Overview
 
-| File | Purpose |
+Praxis answers the question of how a system gets better at its own behavior without rewriting its own identity. It records real task outcomes, waits for patterns to emerge across multiple events, and consolidates validated lessons into a small capped set of active behavior shifts that influence every future run. The cap of 12 is a hard constraint -- when full, new shifts must displace weaker ones or be rejected, preventing the kind of unbounded rule accumulation that degrades system coherence over time. Praxis also receives BehavioralSignal files from Corvus and decides independently whether to act on each one.
+
+## Commands
+
+| Command | Description |
 |---|---|
-| `skill.json` | Package metadata and routing description |
-| `SKILL.md` | Operational instructions for the agent |
-| `references/` | Support files referenced by SKILL.md |
+| `praxis.event.record` | Record a completed event or outcome with evidence |
+| `praxis.lesson.extract` | Derive micro-lessons from recorded events |
+| `praxis.shift.propose` | Propose a new behavior shift from lessons |
+| `praxis.shift.list` | List all shifts with status |
+| `praxis.shift.activate` | Activate a proposed shift (enforces cap) |
+| `praxis.shift.expire` | Expire or reject a shift with reason |
+| `praxis.runtime.brief` | Generate runtime brief with active shifts only |
+| `praxis.debrief.generate` | Produce a plain-language debrief |
+| `praxis.status` | Event count, active shifts, cap usage, last debrief |
+| `praxis.journal` | Write journal for the current run |
 
----
+## Setup
+
+`praxis.init` runs automatically on first invocation and creates all required directories, config.json, and JSONL files. It also registers the `praxis:intake` heartbeat entry to process incoming BehavioralSignal files from Corvus. No manual setup is required.
+
+## Dependencies
+
+**OCAS Skills**
+- [Corvus](https://github.com/indigokarasu/corvus) -- sends BehavioralSignal files via Praxis intake directory
+- [Dispatch](https://github.com/indigokarasu/dispatch) -- receives action decisions for communication execution
+
+**External**
+- None
+
+## Scheduled Tasks
+
+| Job | Mechanism | Schedule | Command |
+|---|---|---|---|
+| `praxis:intake` | heartbeat | Every heartbeat pass | Process BehavioralSignal files from Corvus intake |
 
 ## Changelog
 
-### 2.2.0 (2026-03-22)
+### v2.2.0 -- March 22, 2026
+- Routing improvements
 
-- Added short-name routing aliases to skill.json description and SKILL.md frontmatter for natural invocation ('Scout', 'Sift', etc.)
-- Added trigger phrases to descriptions for improved routing accuracy
-- Cross-skill references in descriptions now use 'use X' format for routing clarity
+### v2.1.0 -- March 22, 2026
+- Run completion protocols and journal operations
+- Heartbeat registration for Corvus signal intake
 
-### 2.1.0 (2026-03-22)
+### v2.0.0 -- March 18, 2026
+- Initial release as part of the unified OCAS skill suite
+---
 
-- Added Run completion section with explicit intake poll, state persistence, and journal write
-- Added Initialization section with heartbeat registration
-- Added Background tasks section: praxis:intake (heartbeat)
-- Removed non-conformant OCAS_ROOT environment variable reference
-
-### 2.0.0 (2026-03-18)
-
-- Initial build of all OCAS skills as a unified suite
+*Praxis is part of the [OpenClaw Agent Suite](https://github.com/indigokarasu) -- a collection of interconnected skills for personal intelligence, autonomous research, and continuous self-improvement. Each skill owns a narrow responsibility and communicates with others through structured signal files, shared journals, and Chronicle, a long-term knowledge graph that accumulates verified facts over time.*
