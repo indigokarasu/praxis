@@ -1,14 +1,14 @@
 ---
 name: ocas-praxis
-description: Praxis: bounded behavioral refinement loop. Records outcomes, extracts micro-lessons from repeated patterns, consolidates them into capped active behavior shifts, applies shifts at runtime, and generates plain-language debriefs. Trigger phrases: 'record outcome', 'extract lesson', 'behavior shift', 'what have I learned', 'runtime brief', 'debrief'. Do not use for general memory, personality rewriting, or knowledge storage.
+source: https://github.com/indigokarasu/praxis
+install: openclaw skill install https://github.com/indigokarasu/praxis
+description: Use when recording outcomes, extracting micro-lessons from repeated patterns, managing capped behavior shifts (max 12 active), generating the runtime brief, or producing plain-language debriefs from the bounded behavioral refinement loop. Trigger phrases: 'record outcome', 'extract lesson', 'behavior shift', 'what have I learned', 'runtime brief', 'debrief'. Do not use for general memory, personality rewriting, or knowledge storage.
 metadata: {"openclaw":{"emoji":"🔄"}}
 ---
 
 # Praxis
 
-Praxis improves future agent behavior through a bounded refinement loop. It records outcomes, extracts lessons from repeated patterns, consolidates them into a small active set of behavior shifts, and produces auditable debriefs.
-
-Praxis is not a diary, general memory system, or self-rewriting identity layer. It is a bounded behavioral refinement loop.
+Praxis is the system's behavioral self-improvement loop — it records real task outcomes, waits for patterns to emerge across multiple events, and then consolidates validated lessons into a small capped set of active behavior shifts that influence every future run. The cap of 12 active shifts is a hard constraint that prevents unbounded rule accumulation, and every shift must trace back to recorded events so nothing changes without an auditable reason.
 
 
 ## When to use
@@ -36,71 +36,6 @@ Praxis owns bounded behavioral refinement: events, lessons, shifts, and debriefs
 Praxis does not own: general memory (Elephas), preference persistence (Taste), pattern discovery (Corvus), communications (Dispatch), skill evaluation (Mentor).
 
 Praxis receives BehavioralSignal files from Corvus. Praxis decides whether to act on each signal.
-
-
-
-## Functions
-
-### praxis_event_record()
-
-**Purpose:** record a completed event or outcome with evidence
-
-**Returns:** Operation result
-
-### praxis_lesson_extract()
-
-**Purpose:** derive micro-lessons from recorded events
-
-**Returns:** Operation result
-
-### praxis_shift_propose()
-
-**Purpose:** propose a new behavior shift from lessons
-
-**Returns:** Operation result
-
-### praxis_shift_list()
-
-**Purpose:** list all shifts with status
-
-**Returns:** Operation result
-
-### praxis_shift_activate()
-
-**Purpose:** activate a proposed shift (enforces cap)
-
-**Returns:** Operation result
-
-### praxis_shift_expire()
-
-**Purpose:** expire or reject a shift with reason
-
-**Returns:** Operation result
-
-### praxis_runtime_brief()
-
-**Purpose:** generate runtime brief with active shifts only
-
-**Returns:** Operation result
-
-### praxis_debrief_generate()
-
-**Purpose:** produce a plain-language debrief
-
-**Returns:** Operation result
-
-### praxis_status()
-
-**Purpose:** event count, active shifts, cap usage, last debrief
-
-**Returns:** Operation result
-
-### praxis_journal()
-
-**Purpose:** write journal for the current run; called at end of every run
-
-**Returns:** Operation result
-
 
 
 ## Commands
@@ -273,9 +208,10 @@ public
 
 ## Support file map
 
-File | When to read
-`references/data_model.md` | Before creating events, lessons, shifts, or debriefs
-`references/lesson_rules.md` | Before extracting lessons from events
-`references/runtime_rules.md` | Before generating runtime brief
-`references/debrief_templates.md` | Before generating debriefs
-`references/journal.md` | Before praxis.journal; at end of every run
+| File | When to read |
+|---|---|
+| `references/data_model.md` | Before creating events, lessons, shifts, or debriefs |
+| `references/lesson_rules.md` | Before extracting lessons from events |
+| `references/runtime_rules.md` | Before generating runtime brief |
+| `references/debrief_templates.md` | Before generating debriefs |
+| `references/journal.md` | Before praxis.journal; at end of every run |
