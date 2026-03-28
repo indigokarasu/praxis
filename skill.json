@@ -7,11 +7,30 @@
   "filesystem": {
     "read": [
       "~/openclaw/data/ocas-praxis/",
-      "~/openclaw/journals/ocas-praxis/"
+      "~/openclaw/journals/ocas-praxis/",
+      "~/openclaw/data/ocas-praxis/intake/"
     ],
     "write": [
       "~/openclaw/data/ocas-praxis/",
       "~/openclaw/journals/ocas-praxis/"
     ]
-  }
+  },
+  "self_update": {
+    "source": "https://github.com/indigokarasu/praxis",
+    "mechanism": "version-checked tarball from GitHub via gh CLI",
+    "command": "praxis.update",
+    "requires_binaries": [
+      "gh",
+      "tar",
+      "python3"
+    ]
+  },
+  "scheduled_tasks": [
+    {
+      "name": "praxis:update",
+      "schedule": "0 0 * * *",
+      "command": "praxis.update",
+      "description": "Self-update from GitHub source"
+    }
+  ]
 }
