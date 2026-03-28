@@ -46,7 +46,7 @@ Praxis answers the question of how a system gets better at its own behavior with
 
 ## Changelog
 
-### v2.2.1 -- March 27, 2026
+### v2.3.0 -- March 27, 2026
 - Added `praxis.update` command and midnight cron for automatic version-checked self-updates
 
 ### v2.2.0 -- March 22, 2026
