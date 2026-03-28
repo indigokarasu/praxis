@@ -2,7 +2,7 @@
 name: ocas-praxis
 source: https://github.com/indigokarasu/praxis
 install: openclaw skill install https://github.com/indigokarasu/praxis
-description: Use when recording outcomes, extracting micro-lessons from repeated patterns, managing capped behavior shifts (max 12 active), generating the runtime brief, or producing plain-language debriefs from the bounded behavioral refinement loop. Trigger phrases: 'record outcome', 'extract lesson', 'behavior shift', 'what have I learned', 'runtime brief', 'debrief'. Do not use for general memory, personality rewriting, or knowledge storage.
+description: Use when recording outcomes, extracting micro-lessons from repeated patterns, managing capped behavior shifts (max 12 active), generating the runtime brief, or producing plain-language debriefs from the bounded behavioral refinement loop. Trigger phrases: 'record outcome', 'extract lesson', 'behavior shift', 'what have I learned', 'runtime brief', 'debrief', 'update praxis'. Do not use for general memory, personality rewriting, or knowledge storage.
 metadata: {"openclaw":{"emoji":"🔄"}}
 ---
 
