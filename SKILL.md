@@ -50,6 +50,7 @@ Praxis receives BehavioralSignal files from Corvus. Praxis decides whether to ac
 - `praxis.debrief.generate` — produce a plain-language debrief
 - `praxis.status` — event count, active shifts, cap usage, last debrief
 - `praxis.journal` — write journal for the current run; called at end of every run
+- `praxis.update` — pull latest from GitHub source; preserves journals and data
 
 
 ## Core loop
@@ -189,7 +190,8 @@ On first invocation of any Praxis command, run `praxis.init`:
 3. Create empty JSONL files: `events.jsonl`, `lessons.jsonl`, `shifts.jsonl`, `debriefs.jsonl`, `decisions.jsonl`
 4. Create `~/openclaw/journals/ocas-praxis/`
 5. Register heartbeat entry `praxis:intake` in `HEARTBEAT.md` if not already present
-6. Log initialization as a DecisionRecord in `decisions.jsonl`
+6. Register cron job `praxis:update` if not already present (check `openclaw cron list` first)
+7. Log initialization as a DecisionRecord in `decisions.jsonl`
 
 
 ## Background tasks
@@ -197,8 +199,37 @@ On first invocation of any Praxis command, run `praxis.init`:
 | Job name | Mechanism | Schedule | Command |
 |---|---|---|---|
 | `praxis:intake` | heartbeat | every heartbeat pass | Check `~/openclaw/data/ocas-praxis/intake/` for BehavioralSignal files from Corvus; process and move to `intake/processed/` |
+| `praxis:update` | cron | `0 0 * * *` (midnight daily) | `praxis.update` |
 
 Heartbeat registration: append `praxis:intake` entry to `~/.openclaw/workspace/HEARTBEAT.md` if not already present.
+
+Registration during `praxis.init`:
+```
+openclaw cron list
+# If praxis:update absent:
+openclaw cron add --name praxis:update --schedule "0 0 * * *" --command "praxis.update" --sessionTarget isolated --lightContext true --timezone America/Los_Angeles
+```
+
+
+## Self-update
+
+`praxis.update` pulls the latest package from the `source:` URL in this file's frontmatter. Runs silently — no output unless the version changed or an error occurred.
+
+1. Read `source:` from frontmatter → extract `{owner}/{repo}` from URL
+2. Read local version from `skill.json`
+3. Fetch remote version: `gh api "repos/{owner}/{repo}/contents/skill.json" --jq '.content' | base64 -d | python3 -c "import sys,json;print(json.load(sys.stdin)['version'])"`
+4. If remote version equals local version → stop silently
+5. Download and install:
+   ```bash
+   TMPDIR=$(mktemp -d)
+   gh api "repos/{owner}/{repo}/tarball/main" > "$TMPDIR/archive.tar.gz"
+   mkdir "$TMPDIR/extracted"
+   tar xzf "$TMPDIR/archive.tar.gz" -C "$TMPDIR/extracted" --strip-components=1
+   cp -R "$TMPDIR/extracted/"* ./
+   rm -rf "$TMPDIR"
+   ```
+6. On failure → retry once. If second attempt fails, report the error and stop.
+7. Output exactly: `I updated Praxis from version {old} to {new}`
 
 
 ## Visibility

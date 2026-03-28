@@ -22,10 +22,11 @@ Praxis answers the question of how a system gets better at its own behavior with
 | `praxis.debrief.generate` | Produce a plain-language debrief |
 | `praxis.status` | Event count, active shifts, cap usage, last debrief |
 | `praxis.journal` | Write journal for the current run |
+| `praxis.update` | Pull latest from GitHub source (preserves journals and data) |
 
 ## Setup
 
-`praxis.init` runs automatically on first invocation and creates all required directories, config.json, and JSONL files. It also registers the `praxis:intake` heartbeat entry to process incoming BehavioralSignal files from Corvus. No manual setup is required.
+`praxis.init` runs automatically on first invocation and creates all required directories, config.json, and JSONL files. It also registers the `praxis:intake` heartbeat entry to process incoming BehavioralSignal files from Corvus and `praxis:update` (midnight daily, self-update). No manual setup is required.
 
 ## Dependencies
 
@@ -41,8 +42,12 @@ Praxis answers the question of how a system gets better at its own behavior with
 | Job | Mechanism | Schedule | Command |
 |---|---|---|---|
 | `praxis:intake` | heartbeat | Every heartbeat pass | Process BehavioralSignal files from Corvus intake |
+| `praxis:update` | cron | `0 0 * * *` (midnight daily) | Self-update from GitHub source |
 
 ## Changelog
+
+### v2.2.1 -- March 27, 2026
+- Added `praxis.update` command and midnight cron for automatic version-checked self-updates
 
 ### v2.2.0 -- March 22, 2026
 - Routing improvements
