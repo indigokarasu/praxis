@@ -37,6 +37,11 @@ Praxis does not own: general memory (Elephas), preference persistence (Taste), p
 
 Praxis receives BehavioralSignal files from Corvus. Praxis decides whether to act on each signal.
 
+## Ontology types
+
+- **Concept/Action** — behavioral shifts, lessons, and runtime constraints managed by Praxis.
+
+Praxis does not emit Signals to Elephas.
 
 ## Commands
 
