@@ -37,11 +37,6 @@ Praxis does not own: general memory (Elephas), preference persistence (Taste), p
 
 Praxis receives BehavioralSignal files from Corvus. Praxis decides whether to act on each signal.
 
-## Ontology types
-
-- **Concept/Action** — behavioral shifts, lessons, and runtime constraints managed by Praxis.
-
-Praxis does not emit Signals to Elephas.
 
 ## Commands
 
@@ -67,7 +62,7 @@ Praxis does not emit Signals to Elephas.
 
 After every Praxis command:
 
-1. Check `~/openclaw/data/ocas-praxis/intake/` for BehavioralSignal files from Corvus; process and move to `intake/processed/`
+1. Read BehavioralSignal files from `/workspace/openclaw/data/ocas-corvus/signals/`. Apply each signal: decide whether to record as an event and extract a lesson. Track consumed `signal_id` values in `signals_evaluated.jsonl` to avoid reprocessing.
 2. Persist events, lessons, shifts, and debriefs to local JSONL files
 3. Log material decisions to `decisions.jsonl`
 4. Write journal via `praxis.journal`
@@ -94,11 +89,7 @@ The runtime brief is a compact list of active shifts only. Target: 3-12 items. I
 
 ## Inter-skill interfaces
 
-Praxis receives BehavioralSignal files from Corvus at: `~/openclaw/data/ocas-praxis/intake/{signal_id}.json`
-
-Praxis checks its intake directory during `praxis.event.record` and during any scheduled pass. Praxis decides whether to record each signal as an event and extract a lesson. It is not obligated to act on every signal.
-
-After processing each file, move to `intake/processed/`.
+**Corvus → Praxis (cooperative read):** Praxis reads BehavioralSignal files from `/workspace/openclaw/data/ocas-corvus/signals/` on each heartbeat pass. Praxis decides whether to record each signal as an event and extract a lesson — it is not obligated to act on every signal. Consumed `signal_id` values are tracked in `signals_evaluated.jsonl`. Corvus does not write to Praxis's directories.
 
 See `spec-ocas-interfaces.md` for the BehavioralSignal schema and handoff contract.
 
@@ -106,19 +97,17 @@ See `spec-ocas-interfaces.md` for the BehavioralSignal schema and handoff contra
 ## Storage layout
 
 ```
-~/openclaw/data/ocas-praxis/
+/workspace/openclaw/data/ocas-praxis/
   config.json
   events.jsonl
   lessons.jsonl
   shifts.jsonl
   debriefs.jsonl
   decisions.jsonl
-  intake/
-    {signal_id}.json
-    processed/
+  signals_evaluated.jsonl
   reports/
 
-~/openclaw/journals/ocas-praxis/
+/workspace/openclaw/journals/ocas-praxis/
   YYYY-MM-DD/
     {run_id}.json
 ```
@@ -128,7 +117,7 @@ Default config.json:
 ```json
 {
   "skill_id": "ocas-praxis",
-  "skill_version": "2.3.0",
+  "skill_version": "2.4.0",
   "config_version": "1",
   "created_at": "",
   "updated_at": "",
@@ -177,7 +166,7 @@ skill_okrs:
 
 ## Optional skill cooperation
 
-- Corvus — receives BehavioralSignal files via intake directory
+- Corvus — reads BehavioralSignal files from Corvus's `signals/` directory (cooperative read; Corvus owns)
 - Dispatch — receives action decisions from Praxis for communication execution
 
 
@@ -190,11 +179,11 @@ Action Journal — every event recording, lesson extraction, shift change, and d
 
 On first invocation of any Praxis command, run `praxis.init`:
 
-1. Create `~/openclaw/data/ocas-praxis/` and subdirectories (`intake/`, `intake/processed/`, `reports/`)
+1. Create `/workspace/openclaw/data/ocas-praxis/` and subdirectories (`reports/`)
 2. Write default `config.json` with ConfigBase fields if absent
-3. Create empty JSONL files: `events.jsonl`, `lessons.jsonl`, `shifts.jsonl`, `debriefs.jsonl`, `decisions.jsonl`
-4. Create `~/openclaw/journals/ocas-praxis/`
-5. Register heartbeat entry `praxis:intake` in `HEARTBEAT.md` if not already present
+3. Create empty JSONL files: `events.jsonl`, `lessons.jsonl`, `shifts.jsonl`, `debriefs.jsonl`, `decisions.jsonl`, `signals_evaluated.jsonl`
+4. Create `/workspace/openclaw/journals/ocas-praxis/`
+5. Register heartbeat entry `praxis:signals` in `HEARTBEAT.md` if not already present
 6. Register cron job `praxis:update` if not already present (check `openclaw cron list` first)
 7. Log initialization as a DecisionRecord in `decisions.jsonl`
 
@@ -203,10 +192,10 @@ On first invocation of any Praxis command, run `praxis.init`:
 
 | Job name | Mechanism | Schedule | Command |
 |---|---|---|---|
-| `praxis:intake` | heartbeat | every heartbeat pass | Check `~/openclaw/data/ocas-praxis/intake/` for BehavioralSignal files from Corvus; process and move to `intake/processed/` |
+| `praxis:signals` | heartbeat | every heartbeat pass | Read BehavioralSignal files from `/workspace/openclaw/data/ocas-corvus/signals/`; process new signals (not in `signals_evaluated.jsonl`); record as events and extract lessons as appropriate |
 | `praxis:update` | cron | `0 0 * * *` (midnight daily) | `praxis.update` |
 
-Heartbeat registration: append `praxis:intake` entry to `~/.openclaw/workspace/HEARTBEAT.md` if not already present.
+Heartbeat registration: append `praxis:signals` entry to `~/.openclaw/workspace/HEARTBEAT.md` if not already present.
 
 Registration during `praxis.init`:
 ```

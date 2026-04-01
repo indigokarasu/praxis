@@ -1,6 +1,6 @@
 {
   "name": "ocas-praxis",
-  "version": "2.3.3",
+  "version": "2.4.0",
   "description": "Praxis: bounded behavioral refinement loop. Records outcomes, extracts micro-lessons from repeated patterns, consolidates them into capped active behavior shifts, applies shifts at runtime, and generates plain-language debriefs. Trigger phrases: 'record outcome', 'extract lesson', 'behavior shift', 'what have I learned', 'runtime brief', 'debrief', 'update praxis'. Do not use for general memory, personality rewriting, or knowledge storage.",
   "author": "Indigo Karasu",
   "email": "mx.indigo.karasu@gmail.com",
