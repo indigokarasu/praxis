@@ -168,11 +168,23 @@ skill_okrs:
 
 - Corvus — reads BehavioralSignal files from Corvus's `signals/` directory (cooperative read; Corvus owns)
 - Dispatch — receives action decisions from Praxis for communication execution
+- Elephas — journal entity observations consumed during Chronicle ingestion
 
 
 ## Journal outputs
 
 Action Journal — every event recording, lesson extraction, shift change, and debrief generation.
+
+When entities are encountered during runs, journals should include the following fields in `decision.payload`:
+
+- `entities_observed` — entities noticed during the run (e.g., Concept/Action for behavioral events and lessons, Concept/Idea for behavioral patterns and shifts)
+- `relationships_observed` — relationships between observed entities
+- `preferences_observed` — any user preferences or behavioral preferences surfaced
+
+Each entity observation must include a `user_relevance` field:
+- `user` — the entity is directly related to the user's world (e.g., lessons learned about user preferences such as "user prefers concise responses")
+- `agent_only` — encountered incidentally as part of the agent's internal behavioral refinement (most Praxis entities fall here)
+- `unknown` — relevance to the user is unclear
 
 
 ## Initialization
