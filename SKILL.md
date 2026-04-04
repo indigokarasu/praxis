@@ -252,3 +252,13 @@ public
 | `references/runtime_rules.md` | Before generating runtime brief |
 | `references/debrief_templates.md` | Before generating debriefs |
 | `references/journal.md` | Before praxis.journal; at end of every run |
+
+## Update command
+
+This skill self-updates every 24 hours via:
+
+```bash
+openclaw praxis.update
+```
+
+This pulls the latest version from GitHub and restarts the skill's background tasks if applicable.
