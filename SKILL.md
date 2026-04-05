@@ -38,6 +38,15 @@ Praxis does not own: general memory (Elephas), preference persistence (Taste), p
 Praxis receives BehavioralSignal files from Corvus. Praxis decides whether to act on each signal.
 
 
+## Ontology types
+
+Praxis observes entity types during behavioral refinement:
+- **Concept/Event** — recorded outcomes, task completions, failures, corrections, and behavioral signals
+- **Concept/Idea** — extracted lessons, behavior shifts, and refinements
+
+Praxis does not extract or emit Signals to Elephas directly. Journal entries track recorded events and behavioral shifts, but these are not promoted to Chronicle. Lessons remain isolated to the bounded refinement loop and do not flow to the knowledge graph.
+
+
 ## Commands
 
 - `praxis.event.record` — record a completed event or outcome with evidence
