@@ -29,12 +29,12 @@ Praxis answers the question of how a system gets better at its own behavior with
 
 ## Setup
 
-`praxis.init` runs automatically on first invocation and creates all required directories, config.json, and JSONL files. It also registers the `praxis:intake` heartbeat entry to process incoming BehavioralSignal files from Corvus and `praxis:update` (midnight daily, self-update). No manual setup is required.
+`praxis.init` runs automatically on first invocation and creates all required directories, config.json, and JSONL files. It also registers the `praxis:journal-scan` heartbeat entry to process incoming BehavioralSignal files from Corvus and `praxis:update` (midnight daily, self-update). No manual setup is required.
 
 ## Dependencies
 
 **OCAS Skills**
-- [Corvus](https://github.com/indigokarasu/corvus) -- sends BehavioralSignal files via Praxis intake directory
+- [Corvus](https://github.com/indigokarasu/corvus) -- sends BehavioralSignal files via Praxis journal payload
 - [Dispatch](https://github.com/indigokarasu/dispatch) -- receives action decisions for communication execution
 
 **External**
@@ -44,7 +44,7 @@ Praxis answers the question of how a system gets better at its own behavior with
 
 | Job | Mechanism | Schedule | Command |
 |---|---|---|---|
-| `praxis:intake` | heartbeat | Every heartbeat pass | Process BehavioralSignal files from Corvus intake |
+| `praxis:journal-scan` | heartbeat | Every heartbeat pass | Scan Corvus journals for BehavioralSignal payloads (via journal payload) |
 | `praxis:update` | cron | `0 0 * * *` (midnight daily) | Self-update from GitHub source |
 
 ## Changelog
@@ -62,7 +62,7 @@ Praxis answers the question of how a system gets better at its own behavior with
 
 ### v2.1.0 -- March 22, 2026
 - Run completion protocols and journal operations
-- Heartbeat registration for Corvus signal intake
+- Heartbeat registration for Corvus journal signal payloads
 
 ### v2.0.0 -- March 18, 2026
 - Initial release as part of the unified OCAS skill suite
