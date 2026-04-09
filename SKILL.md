@@ -1,9 +1,43 @@
 ---
 name: ocas-praxis
-source: https://github.com/indigokarasu/praxis
-install: openclaw skill install https://github.com/indigokarasu/praxis
-description: Use when recording outcomes, extracting micro-lessons from repeated patterns, managing capped behavior shifts (max 12 active), generating the runtime brief, or producing plain-language debriefs from the bounded behavioral refinement loop. Trigger phrases: 'record outcome', 'extract lesson', 'behavior shift', 'what have I learned', 'runtime brief', 'debrief', 'update praxis'. Do not use for general memory, personality rewriting, or knowledge storage.
-metadata: {"openclaw":{"emoji":"🔄"}}
+description: >
+  Praxis: bounded behavioral refinement loop. Records outcomes, extracts
+  micro-lessons from repeated patterns, consolidates them into capped active
+  behavior shifts, applies shifts at runtime, and generates plain-language
+  debriefs. Trigger phrases: 'record outcome', 'extract lesson', 'behavior
+  shift', 'what have I learned', 'runtime brief', 'debrief', 'update praxis'.
+  Do not use for general memory, personality rewriting, or knowledge storage.
+metadata:
+  author: Indigo Karasu
+  email: mx.indigo.karasu@gmail.com
+  version: "2.6.0"
+  hermes:
+    tags: [behavior, lessons, refinement]
+    category: execution
+    cron:
+      - name: "praxis:update"
+        schedule: "0 0 * * *"
+        command: "praxis.update"
+  openclaw:
+    skill_type: system
+    visibility: public
+    filesystem:
+      read:
+        - "$OCAS_DATA_ROOT/data/ocas-praxis/"
+        - "$OCAS_DATA_ROOT/journals/ocas-praxis/"
+        - "$OCAS_DATA_ROOT/data/ocas-praxis/intake/"
+      write:
+        - "$OCAS_DATA_ROOT/data/ocas-praxis/"
+        - "$OCAS_DATA_ROOT/journals/ocas-praxis/"
+    self_update:
+      source: "https://github.com/indigokarasu/praxis"
+      mechanism: "version-checked tarball from GitHub via gh CLI"
+      command: "praxis.update"
+      requires_binaries: [gh, tar, python3]
+    cron:
+      - name: "praxis:update"
+        schedule: "0 0 * * *"
+        command: "praxis.update"
 ---
 
 # Praxis
@@ -205,7 +239,7 @@ On first invocation of any Praxis command, run `praxis.init`:
 3. Create empty JSONL files: `events.jsonl`, `lessons.jsonl`, `shifts.jsonl`, `debriefs.jsonl`, `decisions.jsonl`, `signals_evaluated.jsonl`
 4. Create `/workspace/openclaw/journals/ocas-praxis/`
 5. Register heartbeat entry `praxis:signals` in `HEARTBEAT.md` if not already present
-6. Register cron job `praxis:update` if not already present (check `openclaw cron list` first)
+6. Register cron job `praxis:update` if not already present (check the platform scheduling registry first)
 7. Log initialization as a DecisionRecord in `decisions.jsonl`
 
 
@@ -216,13 +250,12 @@ On first invocation of any Praxis command, run `praxis.init`:
 | `praxis:signals` | heartbeat | every heartbeat pass | Read BehavioralSignal files from `/workspace/openclaw/data/ocas-corvus/signals/`; process new signals (not in `signals_evaluated.jsonl`); record as events and extract lessons as appropriate |
 | `praxis:update` | cron | `0 0 * * *` (midnight daily) | `praxis.update` |
 
-Heartbeat registration: append `praxis:signals` entry to `~/.openclaw/workspace/HEARTBEAT.md` if not already present.
+Heartbeat registration: append `praxis:signals` entry to `$OCAS_WORKSPACE_ROOT/HEARTBEAT.md` if not already present.
 
 Registration during `praxis.init`:
 ```
-openclaw cron list
-# If praxis:update absent:
-openclaw cron add --name praxis:update --schedule "0 0 * * *" --command "praxis.update" --sessionTarget isolated --lightContext true --timezone America/Los_Angeles
+# Check platform scheduling registry for existing tasks
+# Task declared in SKILL.md frontmatter metadata.{platform}.cron
 ```
 
 
