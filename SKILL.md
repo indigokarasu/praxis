@@ -10,7 +10,7 @@ description: >
 metadata:
   author: Indigo Karasu
   email: mx.indigo.karasu@gmail.com
-  version: "2.6.1"
+  version: "2.6.2"
   hermes:
     tags: [behavior, lessons, refinement]
     category: execution
@@ -299,7 +299,7 @@ public
 This skill self-updates every 24 hours via:
 
 ```bash
-openclaw praxis.update
+praxis.update
 ```
 
 This pulls the latest version from GitHub and restarts the skill's background tasks if applicable.
