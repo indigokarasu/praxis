@@ -49,6 +49,9 @@ Praxis answers the question of how a system gets better at its own behavior with
 
 ## Changelog
 
+
+### v2.6.5 — April 26, 2026
+- Version alignment per spec-ocas-skill-publishing.md (no functional change)
 ### v2.5.0 -- April 2, 2026
 - Structured entity observations in journal payloads (`entities_observed`, `relationships_observed`, `preferences_observed`)
 - `user_relevance` tagging on journal observations (default `agent_only` for behavioral patterns, `user` for user-preference lessons)
