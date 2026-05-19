@@ -43,7 +43,6 @@ metadata:
 
 Praxis is the system's behavioral self-improvement loop — it records real task outcomes, waits for patterns to emerge across multiple events, and then consolidates validated lessons into a small capped set of active behavior shifts that influence every future run. The cap of 12 active shifts is a hard constraint that prevents unbounded rule accumulation, and every shift must trace back to recorded events so nothing changes without an auditable reason.
 
-
 ## When to use
 
 - Record a task outcome, failure, success, or correction
@@ -51,7 +50,6 @@ Praxis is the system's behavioral self-improvement loop — it records real task
 - Review or manage active behavior shifts
 - Generate the current runtime brief (active shifts only)
 - Produce a debrief explaining what changed and why
-
 
 ## When not to use
 
@@ -61,7 +59,6 @@ Praxis is the system's behavioral self-improvement loop — it records real task
 - Broad autobiographical summaries
 - Silent personality mutation
 
-
 ## Responsibility boundary
 
 Praxis owns bounded behavioral refinement: events, lessons, shifts, and debriefs.
@@ -70,7 +67,6 @@ Praxis does not own: general memory (Elephas), preference persistence (Taste), p
 
 Praxis receives BehavioralSignal files from Corvus. Praxis decides whether to act on each signal.
 
-
 ## Ontology types
 
 Praxis observes entity types during behavioral refinement:
@@ -78,7 +74,6 @@ Praxis observes entity types during behavioral refinement:
 - **Concept/Idea** — extracted lessons, behavior shifts, and refinements
 
 Praxis does not extract or emit Signals to Elephas directly. Journal entries track recorded events and behavioral shifts, but these are not promoted to Chronicle. Lessons remain isolated to the bounded refinement loop and do not flow to the knowledge graph.
-
 
 ## Commands
 
@@ -94,11 +89,9 @@ Praxis does not extract or emit Signals to Elephas directly. Journal entries tra
 - `praxis.journal` — write journal for the current run; called at end of every run
 - `praxis.update` — pull latest from GitHub source; preserves journals and data
 
-
 ## Core loop
 
 1. Record event → 2. Extract lessons (if pattern detected) → 3. Propose shift → 4. Activate (if cap allows) → 5. Generate debrief
-
 
 ## Run completion
 
@@ -118,23 +111,19 @@ After every Praxis command:
 - Maximum 12 active shifts (configurable)
 - Every shift must trace to recorded events
 
-
 ## Capping and consolidation rules
 
 Default cap: 12 active shifts. When at cap and a new shift is proposed: merge overlapping shifts, replace a weaker shift, or reject the new shift. No duplicate or contradictory active shifts.
 
-
 ## Runtime injection rules
 
 The runtime brief is a compact list of active shifts only. Target: 3-12 items. Imperative, behavior-facing, free of historical clutter. Not a narrative log.
-
 
 ## Inter-skill interfaces
 
 **Corvus → Praxis (cooperative read):** Praxis reads BehavioralSignal files from `{agent_root}/commons/data/ocas-corvus/signals/` on each heartbeat pass. Praxis decides whether to record each signal as an event and extract a lesson — it is not obligated to act on every signal. Consumed `signal_id` values are tracked in `signals_evaluated.jsonl`. Corvus does not write to Praxis's directories.
 
 See `spec-ocas-interfaces.md` for the BehavioralSignal schema and handoff contract.
-
 
 ## Storage layout
 
@@ -153,7 +142,6 @@ See `spec-ocas-interfaces.md` for the BehavioralSignal schema and handoff contra
   YYYY-MM-DD/
     {run_id}.json
 ```
-
 
 Default config.json:
 ```json
@@ -175,7 +163,6 @@ Default config.json:
   }
 }
 ```
-
 
 ## OKRs
 
@@ -205,13 +192,11 @@ skill_okrs:
     evaluation_window: 30_runs
 ```
 
-
 ## Optional skill cooperation
 
 - Corvus — reads BehavioralSignal files from Corvus's `signals/` directory (cooperative read; Corvus owns)
 - Dispatch — receives action decisions from Praxis for communication execution
 - Elephas — journal entity observations consumed during Chronicle ingestion
-
 
 ## Journal outputs
 
@@ -228,7 +213,6 @@ Each entity observation must include a `user_relevance` field:
 - `agent_only` — encountered incidentally as part of the agent's internal behavioral refinement (most Praxis entities fall here)
 - `unknown` — relevance to the user is unclear
 
-
 ## Initialization
 
 On first invocation of any Praxis command, run `praxis.init`:
@@ -240,7 +224,6 @@ On first invocation of any Praxis command, run `praxis.init`:
 5. Register heartbeat entry `praxis:signals` in `HEARTBEAT.md` if not already present
 6. Register cron job `praxis:update` if not already present (check the platform scheduling registry first)
 7. Log initialization as a DecisionRecord in `decisions.jsonl`
-
 
 ## Background tasks
 
@@ -256,7 +239,6 @@ Registration during `praxis.init`:
 # Check platform scheduling registry for existing tasks
 # Task declared in SKILL.md frontmatter metadata.{platform}.cron
 ```
-
 
 ## Self-update
 
@@ -278,11 +260,9 @@ Registration during `praxis.init`:
 6. On failure → retry once. If second attempt fails, report the error and stop.
 7. Output exactly: `I updated Praxis from version {old} to {new}`
 
-
 ## Visibility
 
 public
-
 
 ## Support file map
 
