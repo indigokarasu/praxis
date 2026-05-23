@@ -125,6 +125,15 @@ The runtime brief is a compact list of active shifts only. Target: 3-12 items. I
 
 See `spec-ocas-interfaces.md` for the BehavioralSignal schema and handoff contract.
 
+## Recovery Behavior
+
+This skill implements the recovery contract from `spec-ocas-recovery.md`.
+
+- **Evidence**: Every run writes an evidence record to `{agent_root}/commons/data/ocas-praxis/evidence.jsonl`, including no-op runs. The `not_activity_reason` field is mandatory when no side effects occur.
+- **Gap detection**: On every wake, checks the evidence log. If gap exceeds expected cadence for signals processing, logs `gap_detected`.
+- **Degraded mode**: When Corvus signals are unavailable, continues with available inputs and logs `degraded: corvus`.
+- **Log compaction**: Evidence and decision logs older than 30 days (no-op) or 90 days (error/gap) compacted. Last 7 days retained.
+
 ## Storage layout
 
 ```
@@ -136,8 +145,10 @@ See `spec-ocas-interfaces.md` for the BehavioralSignal schema and handoff contra
   debriefs.jsonl
   decisions.jsonl
   signals_evaluated.jsonl
+  intents.jsonl
+  evidence.jsonl
   reports/
-
+```
 {agent_root}/commons/journals/ocas-praxis/
   YYYY-MM-DD/
     {run_id}.json
@@ -190,6 +201,16 @@ skill_okrs:
     direction: maximize
     target: 0.80
     evaluation_window: 30_runs
+  - name: schedule_adherence
+    metric: fraction of scheduled runs (cron + heartbeat) that completed without skip
+    direction: maximize
+    target: 0.95
+    evaluation_window: 30_runs
+  - name: data_integrity
+    metric: fraction of evidence records with valid schema and no missing mandatory fields
+    direction: maximize
+    target: 0.99
+    evaluation_window: 30_runs
 ```
 
 ## Optional skill cooperation
@@ -219,7 +240,7 @@ On first invocation of any Praxis command, run `praxis.init`:
 
 1. Create `{agent_root}/commons/data/ocas-praxis/` and subdirectories (`reports/`)
 2. Write default `config.json` with ConfigBase fields if absent
-3. Create empty JSONL files: `events.jsonl`, `lessons.jsonl`, `shifts.jsonl`, `debriefs.jsonl`, `decisions.jsonl`, `signals_evaluated.jsonl`
+3. Create empty JSONL files: `events.jsonl`, `lessons.jsonl`, `shifts.jsonl`, `debriefs.jsonl`, `decisions.jsonl`, `signals_evaluated.jsonl`, `intents.jsonl`, `evidence.jsonl`
 4. Create `{agent_root}/commons/journals/ocas-praxis/`
 5. Register heartbeat entry `praxis:signals` in `HEARTBEAT.md` if not already present
 6. Register cron job `praxis:update` if not already present (check the platform scheduling registry first)
