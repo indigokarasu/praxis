@@ -1,0 +1,32 @@
+{
+  "skill": "ocas-praxis",
+  "version": "1.0.0",
+  "description": "Evaluation test cases for ocas-praxis",
+  "evals": [
+    {
+      "input": "Record the outcome of today's task: the deployment succeeded but took 3 tries",
+      "expected_output": "Creates an event record in events.jsonl with task outcome, failure count, and evidence",
+      "description": "Event recording"
+    },
+    {
+      "input": "What behavior shifts are currently active?",
+      "expected_output": "Returns the runtime brief with active shifts, cap usage (max 12), and last debrief summary",
+      "description": "Active shifts inquiry"
+    },
+    {
+      "input": "Extract lessons from the patterns in my last 30 sessions",
+      "expected_output": "Mines recorded events for repeated patterns, extracts micro-lessons, and proposes behavior shifts if pattern count >= 2",
+      "description": "Lesson extraction"
+    },
+    {
+      "input": "Generate a debrief on what Praxis learned this week",
+      "expected_output": "Produces a plain-language debrief summarizing events, lessons, and activated shifts with reasoning",
+      "description": "Weekly debrief"
+    },
+    {
+      "input": "What's the current status of the behavioral refinement loop?",
+      "expected_output": "Returns event count, active shift count, cap usage, and last debrief timestamp",
+      "description": "Praxis status"
+    }
+  ]
+}

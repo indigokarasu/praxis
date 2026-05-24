@@ -1,42 +1,17 @@
 ---
 name: ocas-praxis
-description: >
-  Praxis: bounded behavioral refinement loop. Records outcomes, extracts
-  micro-lessons from repeated patterns, consolidates them into capped active
-  behavior shifts, applies shifts at runtime, and generates plain-language
-  debriefs. Trigger phrases: 'record outcome', 'extract lesson', 'behavior
-  shift', 'what have I learned', 'runtime brief', 'debrief', 'update praxis'.
-  Do not use for general memory, personality rewriting, or knowledge storage.
+description: 'Praxis: bounded behavioral refinement loop. Records outcomes, extracts
+  micro-lessons from repeated patterns, consolidates them into capped active behavior
+  shifts, applies shifts at runtime, and generates plain-language debriefs. Trigger
+  phrases: ''record outcome'', ''extract lesson'', ''behavior shift'', ''what have
+  I learned'', ''runtime brief'', ''debrief'', ''update praxis''. Do not use for general
+  memory, personality rewriting, or knowledge storage.
+
+  '
+license: MIT
 metadata:
   author: Indigo Karasu
-  email: mx.indigo.karasu@gmail.com
-  version: "2.6.5"
-  hermes:
-    tags: [behavior, lessons, refinement]
-    category: execution
-    cron:
-      - name: "praxis:update"
-        schedule: "0 0 * * *"
-        command: "praxis.update"
-  openclaw:
-    skill_type: system
-    visibility: public
-    filesystem:
-      read:
-        - "{agent_root}/commons/data/ocas-praxis/"
-        - "{agent_root}/commons/journals/ocas-praxis/"
-      write:
-        - "{agent_root}/commons/data/ocas-praxis/"
-        - "{agent_root}/commons/journals/ocas-praxis/"
-    self_update:
-      source: "https://github.com/indigokarasu/praxis"
-      mechanism: "version-checked tarball from GitHub via gh CLI"
-      command: "praxis.update"
-      requires_binaries: [gh, tar, python3]
-    cron:
-      - name: "praxis:update"
-        schedule: "0 0 * * *"
-        command: "praxis.update"
+  version: "2.7.1"
 ---
 
 # Praxis
@@ -65,7 +40,7 @@ Praxis owns bounded behavioral refinement: events, lessons, shifts, and debriefs
 
 Praxis does not own: general memory (Elephas), preference persistence (Taste), pattern discovery (Corvus), communications (Dispatch), skill evaluation (Mentor).
 
-Praxis receives BehavioralSignal files from Corvus. Praxis decides whether to act on each signal.
+Praxis reads journals from all skills to extract behavioral signals. Praxis decides whether to act on each signal found in any skill's journal output.
 
 ## Ontology types
 
@@ -97,7 +72,7 @@ Praxis does not extract or emit Signals to Elephas directly. Journal entries tra
 
 After every Praxis command:
 
-1. Read BehavioralSignal files from `{agent_root}/commons/data/ocas-corvus/signals/`. Apply each signal: decide whether to record as an event and extract a lesson. Track consumed `signal_id` values in `signals_evaluated.jsonl` to avoid reprocessing.
+1. Scan all skill journals at `{agent_root}/commons/journals/*/YYYY-MM-DD/` for new journal entries (not in `journals_evaluated.jsonl`). For each new journal: extract behavioral signals (failures, corrections, successes, patterns), decide whether to record as an event and extract a lesson. Track consumed `journal_id` values in `journals_evaluated.jsonl` to avoid reprocessing.
 2. Persist events, lessons, shifts, and debriefs to local JSONL files
 3. Log material decisions to `decisions.jsonl`
 4. Write journal via `praxis.journal`
@@ -121,9 +96,38 @@ The runtime brief is a compact list of active shifts only. Target: 3-12 items. I
 
 ## Inter-skill interfaces
 
-**Corvus → Praxis (cooperative read):** Praxis reads BehavioralSignal files from `{agent_root}/commons/data/ocas-corvus/signals/` on each heartbeat pass. Praxis decides whether to record each signal as an event and extract a lesson — it is not obligated to act on every signal. Consumed `signal_id` values are tracked in `signals_evaluated.jsonl`. Corvus does not write to Praxis's directories.
+**All skills → Praxis (cooperative read):** Praxis scans journal output from every skill at `{agent_root}/commons/journals/*/YYYY-MM-DD/` on each cron run. Praxis extracts behavioral signals (failures, corrections, successes, patterns) from journal entries and decides whether to record each as an event and extract a lesson. Praxis is not obligated to act on every journal entry. Consumed `journal_id` values are tracked in `journals_evaluated.jsonl`. Skills do not write to Praxis's directories.
 
-See `spec-ocas-interfaces.md` for the BehavioralSignal schema and handoff contract.
+Skills known to produce journals that Praxis reads:
+- ocas-corvus — pattern analysis and signal discovery
+- ocas-spot — booking attempts, failures, bot detection outcomes
+- ocas-rally — trade execution, research outcomes, healthcheck results
+- ocas-taste — preference signals and recommendations
+- ocas-elephas — knowledge graph ingestion events
+- ocas-finch — self-improvement mining results
+- ocas-fellow — experimentation outcomes
+- ocas-scout — research results and OSINT findings
+- ocas-bones — prediction market monitoring
+- ocas-bower — Drive organization results
+- ocas-vibes — writing output signals
+- ocas-voyage — travel planning outcomes
+- ocas-imagine — image generation results
+- ocas-weave — contact graph changes
+- ocas-vesper — daily briefing signals
+- ocas-dispatch — communication outcomes
+- ocas-mentor — skill evaluation results
+- ocas-lucid — journal curation outcomes
+- ocas-sands — calendar management outcomes
+- ocas-sift — research synthesis results
+- ocas-reach — world-data query outcomes
+- ocas-inception — environment simulation results
+- ocas-look — image-to-action outcomes
+- ocas-multipass — delegated task outcomes
+- ocas-forge — skill authoring outcomes
+- ocas-haiku — Bluesky posting outcomes
+- ocas-custodian — monitoring and alert outcomes
+
+See `references/journal_ingestion.md` for the journal schema and ingestion rules.
 
 ## Recovery Behavior
 
@@ -131,8 +135,11 @@ This skill implements the recovery contract from `spec-ocas-recovery.md`.
 
 - **Evidence**: Every run writes an evidence record to `{agent_root}/commons/data/ocas-praxis/evidence.jsonl`, including no-op runs. The `not_activity_reason` field is mandatory when no side effects occur.
 - **Gap detection**: On every wake, checks the evidence log. If gap exceeds expected cadence for signals processing, logs `gap_detected`.
-- **Degraded mode**: When Corvus signals are unavailable, continues with available inputs and logs `degraded: corvus`.
+- **Degraded mode**: When journal directories are unavailable or empty, continues with available inputs and logs `degraded: journals`.
 - **Log compaction**: Evidence and decision logs older than 30 days (no-op) or 90 days (error/gap) compacted. Last 7 days retained.
+
+- **Cross-skill contamination risk** — Praxis's core loop ("Record event → Extract lessons → Propose shift → Activate → Generate debrief") is distinct from Finch's ("Scan → Work → Mine → Route → Journal"). During major rewrites, verify Praxis content doesn't pick up artifacts from Finch or other sibling skills. The "core loop" and "run completion" sections are the most likely contamination points.
+- **Journal directory scan pattern** — Praxis scans `commons/journals/*/YYYY-MM-DD/` on each cron run. Track consumed entries in `journals_evaluated.jsonl` using the composite key `{skill_name}/{YYYY-MM-DD}/{run_id}.json`. Never re-process a journal entry that's already been evaluated.
 
 ## Storage layout
 
@@ -144,7 +151,7 @@ This skill implements the recovery contract from `spec-ocas-recovery.md`.
   shifts.jsonl
   debriefs.jsonl
   decisions.jsonl
-  signals_evaluated.jsonl
+  signals_evaluated.jsonl → journals_evaluated.jsonl  (renamed in v2.7.0 — tracks consumed journal IDs instead of signal IDs)
   intents.jsonl
   evidence.jsonl
   reports/
@@ -202,7 +209,7 @@ skill_okrs:
     target: 0.80
     evaluation_window: 30_runs
   - name: schedule_adherence
-    metric: fraction of scheduled runs (cron + heartbeat) that completed without skip
+    metric: fraction of scheduled cron runs that completed without skip
     direction: maximize
     target: 0.95
     evaluation_window: 30_runs
@@ -215,7 +222,7 @@ skill_okrs:
 
 ## Optional skill cooperation
 
-- Corvus — reads BehavioralSignal files from Corvus's `signals/` directory (cooperative read; Corvus owns)
+- All OCAS skills — Praxis reads journal output from every skill at `{agent_root}/commons/journals/*/`. Skills don't know Praxis exists; this is a cooperative read.
 - Dispatch — receives action decisions from Praxis for communication execution
 - Elephas — journal entity observations consumed during Chronicle ingestion
 
@@ -240,25 +247,34 @@ On first invocation of any Praxis command, run `praxis.init`:
 
 1. Create `{agent_root}/commons/data/ocas-praxis/` and subdirectories (`reports/`)
 2. Write default `config.json` with ConfigBase fields if absent
-3. Create empty JSONL files: `events.jsonl`, `lessons.jsonl`, `shifts.jsonl`, `debriefs.jsonl`, `decisions.jsonl`, `signals_evaluated.jsonl`, `intents.jsonl`, `evidence.jsonl`
+3. Create empty JSONL files: `events.jsonl`, `lessons.jsonl`, `shifts.jsonl`, `debriefs.jsonl`, `decisions.jsonl`, `journals_evaluated.jsonl`, `intents.jsonl`, `evidence.jsonl`
 4. Create `{agent_root}/commons/journals/ocas-praxis/`
-5. Register heartbeat entry `praxis:signals` in `HEARTBEAT.md` if not already present
-6. Register cron job `praxis:update` if not already present (check the platform scheduling registry first)
-7. Log initialization as a DecisionRecord in `decisions.jsonl`
+5. Register cron jobs: `praxis:journal_ingest` (every 30min), `praxis:debrief` (6am daily), `praxis:update` (midnight daily). Use `hermes cron create` for each. Skip if already registered.
+6. Log initialization as a DecisionRecord in `decisions.jsonl`
 
 ## Background tasks
 
+All Praxis background tasks use cron scheduling. **Hermes does not support heartbeats.**
+
 | Job name | Mechanism | Schedule | Command |
 |---|---|---|---|
-| `praxis:signals` | heartbeat | every heartbeat pass | Read BehavioralSignal files from `{agent_root}/commons/data/ocas-corvus/signals/`; process new signals (not in `signals_evaluated.jsonl`); record as events and extract lessons as appropriate |
+| `praxis:journal_ingest` | cron | `*/30 * * * *` (every 30 minutes) | Scan all skill journals at `{agent_root}/commons/journals/*/YYYY-MM-DD/` for new entries since last run; extract behavioral signals; record events and extract lessons as appropriate. Write evidence record. |
+| `praxis:debrief` | cron | `0 6 * * *` (6am daily) | Review accumulated events and lessons from the past 24 hours; propose/activate behavior shifts if patterns detected; generate debrief. |
 | `praxis:update` | cron | `0 0 * * *` (midnight daily) | `praxis.update` |
 
-Heartbeat registration: append `praxis:signals` entry to `{agent_root}/HEARTBEAT.md` if not already present.
+**Critical: Do NOT register heartbeat entries in HEARTBEAT.md.** Hermes has no heartbeat mechanism. All Praxis background processing must use cron jobs only.
 
-Registration during `praxis.init`:
-```
-# Check platform scheduling registry for existing tasks
-# Task declared in SKILL.md frontmatter metadata.{platform}.cron
+**Rationale for cron instead of heartbeats:**
+- Hermes has no heartbeat mechanism; cron jobs are the only built-in scheduling primitive
+- Journal ingestion needs to run frequently (every 30min) to process new skill output in near-real-time
+- Debrief generation is a batch operation best done once daily when there's a full day of signals to analyze
+- Self-update is a low-frequency maintenance task suited to midnight runs
+
+**Cron registration during `praxis.init`:**
+```bash
+hermes cron create --name "praxis:journal_ingest" --schedule "*/30 * * * *" --prompt "Run praxis journal ingestion: scan all skill journals for new entries, extract behavioral signals, record events and lessons. Target: {agent_root}/commons/journals/"
+hermes cron create --name "praxis:debrief" --schedule "0 6 * * *" --prompt "Run praxis debrief: review past 24h of events and lessons, propose/activate behavior shifts if patterns detected, generate debrief."
+hermes cron create --name "praxis:update" --schedule "0 0 * * *" --prompt "praxis.update"
 ```
 
 ## Self-update
@@ -285,15 +301,24 @@ Registration during `praxis.init`:
 
 public
 
+## Gotchas
+
+- **Active shift cap is hard** — The 12-shift cap is enforced on every activation. When at cap, new shifts must merge with existing ones, replace a weaker shift, or be rejected. No overflow is possible.
+- **Journal ingestion scans ALL skills** — Every 30-minute cron run scans journal output from every installed skill. If a skill produces verbose journals, this can become expensive. Track consumed IDs in `journals_evaluated.jsonl` to avoid reprocessing.
+- **Cross-skill contamination risk** — Praxis's core loop (Record → Extract → Propose → Activate → Debrief) is distinct from Finch's loop. During rewrites, verify Praxis content doesn't pick up artifacts from Finch or other sibling skills.
+- **Lessons require a minimum pattern count** — A lesson is only extracted when `min_pattern_count` (default 2) events form a repeatable pattern. Single events are recorded but never produce behavior shifts.
+- **Debriefs are plain-language only** — Runtime briefs must be imperative, behavior-facing, and free of historical clutter. A debrief that reads like a narrative log violates the format constraint.
+
 ## Support file map
 
 | File | When to read |
-|---|---|
-| `references/data_model.md` | Before creating events, lessons, shifts, or debriefs |
-| `references/lesson_rules.md` | Before extracting lessons from events |
-| `references/runtime_rules.md` | Before generating runtime brief |
-| `references/debrief_templates.md` | Before generating debriefs |
-| `references/journal.md` | Before praxis.journal; at end of every run |
+|------|-------------|
+| `references/data_model.md` | Before creating events, lessons, shifts, or debriefs; when checking data schemas |
+| `references/lesson_rules.md` | Before extracting lessons from events; when deriving micro-lessons from patterns |
+| `references/runtime_rules.md` | Before generating runtime brief; when formatting active behavior shifts |
+| `references/debrief_templates.md` | Before generating debriefs; when structuring plain-language debrief output |
+| `references/journal.md` | Before calling praxis.journal; at end of every run |
+| `references/journal_ingestion.md` | Before scanning skill journals for new entries; when extracting behavioral signals |
 
 ## Update command
 
