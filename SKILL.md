@@ -215,6 +215,10 @@ public
 - **Lessons require a minimum pattern count** — A lesson is only extracted when `min_pattern_count` (default 2) events form a repeatable pattern. Single events are recorded but never produce behavior shifts.
 - **Debriefs are plain-language only** — Runtime briefs must be imperative, behavior-facing, and free of historical clutter. A debrief that reads like a narrative log violates the format constraint.
 
+## Platform notes
+
+Praxis uses the `memory` tool (2 references) to record behavioral outcomes. On platforms without `memory`, write outcomes to `references/outcomes.md` instead. The behavioral refinement loop works on any platform that provides `write_file` and `read_file`.
+
 ## Support file map
 
 | File | When to read |
