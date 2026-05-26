@@ -34,12 +34,35 @@ Record a praxis event when ANY of the following are true:
 - The journal duration exceeds 5x the skill's average run time
 - The decision summary contains keywords indicating a behavioral lesson
 
+**Execute the fix — don't just summarize.** When you detect a failure signal, record the event AND extract a lesson in the same pass. Don't produce a report saying "X failed, consider updating Y." Actually update Y.
+
+## Failure-phase tagging
+
+When recording an event from a journal, tag the `failure_phase` field:
+
+| Phase | Indicators in journal |
+|-------|-----------------------|
+| **planning** | `decision.summary` contains "should have", "before", "wrong approach", "didn't check", "missing prerequisite" |
+| **execution** | `execution_result.status` is `error` or `partial`, summary contains "failed", "timeout", "wrong parameter" |
+| **response** | Summary contains "too verbose", "wrong format", "just give me", "make it concise", "don't explain" |
+| **null** | Success events, observations without clear failure phase |
+
+Phase tagging is mandatory for correction/failure events. Success events use `null`.
+
 ## When to extract a lesson
 
-Extract a lesson when a pattern is detected across 2+ events with the same:
+Extract a lesson when a pattern is detected across 3+ events (default `min_pattern_count`) with the same:
 - Error type or failure mode
 - Skill or command category
 - User-relevance tag
+
+Exception: 2+ events in the **same failure phase** can produce a phase-aligned lesson. The sharper diagnostic signal (same phase + same pattern) compensates for the lower count.
+
+## Causal grounding requirement
+
+Every extracted lesson must include at minimum the "what" (what pattern occurred). Lessons that also include "why" (causal mechanism) and "when" (boundary conditions) are marked `confidence: high` and can immediately produce behavior shifts.
+
+Lessons with only "what" are marked `confidence: low` and are held for one additional evidence-gathering cycle. If no "why" or "when" emerges after 2 hold cycles, the lesson is rejected with reason: "insufficient grounding."
 
 ## When NOT to record
 

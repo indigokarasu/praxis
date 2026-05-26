@@ -9,10 +9,28 @@ description: 'Praxis: bounded behavioral refinement loop. Records outcomes, extr
 
 '
 license: MIT
+source: https://github.com/indigokarasu/praxis
+includes:
+  - references/**
+  - scripts/**
+
 metadata:
   author: Indigo Karasu
-  version: "2.7.1"
+  version: "2.8.1"
 ---
+## When to Use
+
+- Recording outcomes from skill executions
+- Behavioral refinement based on results
+- Inter-skill cooperation tracking
+- After any significant task completion
+- When feedback loops need durable recording
+## When NOT to Use
+
+- Real-time task execution
+- Content generation or research
+- System health monitoring (use Custodian)
+- Skill evaluation scoring (use Mentor)
 
 # Praxis
 
@@ -26,7 +44,7 @@ Praxis is the system's behavioral self-improvement loop — it records real task
 - Generate the current runtime brief (active shifts only)
 - Produce a debrief explaining what changed and why
 
-## When not to use
+## When NOT to use
 
 - General knowledge storage — use Elephas
 - Preference tracking — use Taste
@@ -85,10 +103,46 @@ After every Praxis command:
 - Only active shifts influence runtime
 - Maximum 12 active shifts (configurable)
 - Every shift must trace to recorded events
+- Every lesson must include causal grounding (the "why" — not just "what")
+- Shifts without decay review expire automatically (configurable, default 14 days)
 
 ## Capping and consolidation rules
 
 Default cap: 12 active shifts. When at cap and a new shift is proposed: merge overlapping shifts, replace a weaker shift, or reject the new shift. No duplicate or contradictory active shifts.
+
+### Shift decay (from forgetting curve research)
+
+Active shifts that aren't reinforced decay. Praxis tracks reinforcement per shift:
+
+- **Reinforced**: Shift applied successfully in a recent run — extends half-life
+- **Stale**: Not reinforced in 7+ days — flagged for review at next debrief
+- **Decayed**: Not reinforced in 14+ days (configurable `decay_days`) — auto-expired with reason "decay: no reinforcement for {N} days"
+
+This prevents the shift list from becoming a graveyard of once-useful but now-stale rules. If a shift IS still valid, re-encountering the pattern will reinforce it. If it was context-specific and that context no longer applies, it naturally decays.
+
+### Elaborative interrogation for lessons
+
+When extracting a lesson, don't just record WHAT happened — capture WHY and WHEN:
+
+- **What**: What pattern of events occurred?
+- **Why**: Why did this pattern emerge? What's the causal mechanism?
+- **When**: Under what conditions does this lesson apply? What are the boundary conditions?
+
+Format: `[LESSON] What: <pattern>. Why: <cause>. When: <conditions>`
+
+Lessons without causal grounding ("do X") are marked `confidence: low` and require an additional reinforcement cycle before producing shifts. Grounded lessons ("do X because Y fails when Z") are marked `confidence: high` and can produce shifts on first pattern detection.
+
+### Failure-phase tagging (from arxiv:2508.13143)
+
+Tag each event with the task phase where the failure occurred. This enables surgical shift targeting:
+
+| Phase | Description | Shift target |
+|-------|-------------|--------------|
+| **Planning** | Wrong approach, bad assumptions, missing prerequisites | Precondition checks, "before doing X, verify Y" |
+| **Execution** | Right plan but tool/step/parameter wrong | Tool usage constraints, parameter validation |
+| **Response** | Correct result but wrong output format/tone | Output formatting rules, verbosity standards |
+
+Two planning-failed events should produce a shift targeting preconditions — not a generic "be more careful."
 
 ## Runtime injection rules
 
@@ -106,34 +160,7 @@ Key storage paths:
 
 **All skills → Praxis (cooperative read):** Praxis scans journal output from every skill at `{agent_root}/commons/journals/*/YYYY-MM-DD/` on each cron run. Praxis extracts behavioral signals (failures, corrections, successes, patterns) from journal entries and decides whether to record each as an event and extract a lesson. Praxis is not obligated to act on every journal entry. Consumed `journal_id` values are tracked in `journals_evaluated.jsonl`. Skills do not write to Praxis's directories.
 
-Skills known to produce journals that Praxis reads:
-- ocas-corvus — pattern analysis and signal discovery
-- ocas-spot — booking attempts, failures, bot detection outcomes
-- ocas-rally — trade execution, research outcomes, healthcheck results
-- ocas-taste — preference signals and recommendations
-- ocas-elephas — knowledge graph ingestion events
-- ocas-finch — self-improvement mining results
-- ocas-fellow — experimentation outcomes
-- ocas-scout — research results and OSINT findings
-- ocas-bones — prediction market monitoring
-- ocas-bower — Drive organization results
-- ocas-vibes — writing output signals
-- ocas-voyage — travel planning outcomes
-- ocas-imagine — image generation results
-- ocas-weave — contact graph changes
-- ocas-vesper — daily briefing signals
-- ocas-dispatch — communication outcomes
-- ocas-mentor — skill evaluation results
-- ocas-lucid — journal curation outcomes
-- ocas-sands — calendar management outcomes
-- ocas-sift — research synthesis results
-- ocas-reach — world-data query outcomes
-- ocas-inception — environment simulation results
-- ocas-look — image-to-action outcomes
-- ocas-multipass — delegated task outcomes
-- ocas-forge — skill authoring outcomes
-- ocas-haiku — Bluesky posting outcomes
-- ocas-custodian — monitoring and alert outcomes
+Known journal-producing skills: ocas-corvus, ocas-spot, ocas-rally, ocas-taste, ocas-elephas, ocas-finch, ocas-fellow, ocas-scout, ocas-bones, ocas-bower, ocas-vibes, ocas-voyage, ocas-imagine, ocas-weave, ocas-vesper, ocas-dispatch, ocas-mentor, ocas-lucid, ocas-sands, ocas-sift, ocas-reach, ocas-inception, ocas-look, ocas-multipass, ocas-forge, ocas-haiku, ocas-custodian. See `references/journal_sources.md` for per-skill signal descriptions.
 
 See `references/journal_ingestion.md` for the journal schema and ingestion rules.
 
@@ -178,10 +205,10 @@ On first invocation of any Praxis command, run `praxis.init`:
 2. Write default `config.json` with ConfigBase fields if absent
 3. Create empty JSONL files: `events.jsonl`, `lessons.jsonl`, `shifts.jsonl`, `debriefs.jsonl`, `decisions.jsonl`, `journals_evaluated.jsonl`, `intents.jsonl`, `evidence.jsonl`
 4. Create `{agent_root}/commons/journals/ocas-praxis/`
-5. Register cron jobs: `praxis:journal_ingest` (every 30min), `praxis:debrief` (6am daily), `praxis:update` (midnight daily). Use `hermes cron create` for each. Skip if already registered.
+5. Register cron jobs: `praxis:journal_ingest` (every 30min), `praxis:decay_check` (noon daily), `praxis:debrief` (6am daily), `praxis:update` (midnight daily). Use `hermes cron create` for each. Skip if already registered.
 6. Log initialization as a DecisionRecord in `decisions.jsonl`
 
-See `references/data_model.md` for the cron registration commands and self-update procedure.
+See `references/data_model.md` for the cron registration commands.
 
 ## Background tasks
 
@@ -190,7 +217,8 @@ All Praxis background tasks use cron scheduling. **Hermes does not support heart
 | Job name | Mechanism | Schedule | Command |
 |---|---|---|---|
 | `praxis:journal_ingest` | cron | `*/30 * * * *` (every 30 minutes) | Scan all skill journals at `{agent_root}/commons/journals/*/YYYY-MM-DD/` for new entries since last run; extract behavioral signals; record events and extract lessons as appropriate. Write evidence record. |
-| `praxis:debrief` | cron | `0 6 * * *` (6am daily) | Review accumulated events and lessons from the past 24 hours; propose/activate behavior shifts if patterns detected; generate debrief. |
+| `praxis:decay_check` | cron | `0 12 * * *` (noon daily) | Review all active shifts, check `last_reinforced_at` against `decay_days` threshold, expire stale shifts, flag shifts approaching expiry. Write evidence record. |
+| `praxis:debrief` | cron | `0 6 * * *` (6am daily) | Review accumulated events and lessons from the past 24 hours; propose/activate behavior shifts if patterns detected; check shift decay status; generate debrief. |
 | `praxis:update` | cron | `0 0 * * *` (midnight daily) | `praxis.update` |
 
 **Critical: Do NOT create a heartbeat task file.** Hermes has no heartbeat mechanism. All Praxis background processing must use cron jobs only.
@@ -201,7 +229,11 @@ All Praxis background tasks use cron scheduling. **Hermes does not support heart
 - Debrief generation is a batch operation best done once daily when there's a full day of signals to analyze
 - Self-update is a low-frequency maintenance task suited to midnight runs
 
-For exact cron registration commands and self-update bash procedure, see `references/data_model.md`.
+For exact cron registration commands, see `references/data_model.md`.
+
+## Self-update
+
+`praxis.update` pulls the latest skill package from GitHub source. Preserves journals and data. See `references/self-update.md` for the full procedure.
 
 ## Visibility
 
@@ -212,18 +244,23 @@ public
 - **Active shift cap is hard** — The 12-shift cap is enforced on every activation. When at cap, new shifts must merge with existing ones, replace a weaker shift, or be rejected. No overflow is possible.
 - **Journal ingestion scans ALL skills** — Every 30-minute cron run scans journal output from every installed skill. If a skill produces verbose journals, this can become expensive. Track consumed IDs in `journals_evaluated.jsonl` to avoid reprocessing.
 - **Cross-skill contamination risk** — Praxis's core loop (Record → Extract → Propose → Activate → Debrief) is distinct from Finch's loop. During rewrites, verify Praxis content doesn't pick up artifacts from Finch or other sibling skills.
-- **Lessons require a minimum pattern count** — A lesson is only extracted when `min_pattern_count` (default 2) events form a repeatable pattern. Single events are recorded but never produce behavior shifts.
+- **Lessons require causal grounding** — A lesson is only extracted when `min_pattern_count` (default 3) events form a repeatable pattern. Lessons without "why" and "when" are marked `confidence: low` and held for additional evidence. The exception: 2+ events in the same failure phase can produce a phase-aligned shift.
+- **Shifts decay without reinforcement** — Active shifts not reinforced in 14 days (configurable) auto-expire. This prevents rule graveyard accumulation. The noon `praxis:decay_check` cron runs this check daily. If a shift is still valid, re-encountering the pattern will reinforce it.
+- **Failure-phase tagging is mandatory for corrections** — Events from journal ingestion must include `failure_phase`. Untagged events can't participate in phase-aligned extraction.
 - **Debriefs are plain-language only** — Runtime briefs must be imperative, behavior-facing, and free of historical clutter. A debrief that reads like a narrative log violates the format constraint.
+- **Execute the fix, don't just summarize** — When you detect a failure signal, record the event AND extract a lesson in the same pass. Don't produce a report saying "X failed, consider updating Y." Actually update Y. This applies to all Praxis operations.
 
 ## Platform notes
 
 Praxis uses the `memory` tool (2 references) to record behavioral outcomes. On platforms without `memory`, write outcomes to `references/outcomes.md` instead. The behavioral refinement loop works on any platform that provides `write_file` and `read_file`.
 
-## Support file map
+## Support File Map
 
 | File | When to read |
 |------|-------------|
-| `references/data_model.md` | Before creating events, lessons, shifts, or debriefs; when checking data schemas; for storage layout, config, OKRs, cron commands, and self-update procedure |
+| `references/data_model.md` | Before creating events, lessons, shifts, or debriefs; when checking data schemas; for storage layout, config, OKRs, cron commands |
+| `references/self-update.md` | Before running `praxis.update` — compatibility checks and update procedure |
+| `references/journal_sources.md` | Before scanning skill journals — per-skill signal descriptions and journal-producing skill list |
 | `references/lesson_rules.md` | Before extracting lessons from events; when deriving micro-lessons from patterns |
 | `references/runtime_rules.md` | Before generating runtime brief; when formatting active behavior shifts |
 | `references/debrief_templates.md` | Before generating debriefs; when structuring plain-language debrief output |

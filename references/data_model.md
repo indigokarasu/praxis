@@ -2,18 +2,30 @@
 
 ## Event
 ```json
-{"id":"string","timestamp":"string","domain":"string","context_summary":"string","outcome_type":"string — success|failure|correction|observation","outcome_summary":"string","evidence":["string"],"user_visible_impact":"string"}
+{"id":"string","timestamp":"string","domain":"string","context_summary":"string","outcome_type":"string — success|failure|correction|observation","outcome_summary":"string","evidence":["string"],"user_visible_impact":"string","failure_phase":"string — planning|execution|response|null"}
 ```
+
+The `failure_phase` field (added v2.8.0) tags the task phase where the failure occurred. This enables phase-specific lesson extraction and shift targeting. See `lesson_rules.md` for phase-aligned extraction rules.
 
 ## MicroLesson
 ```json
-{"id":"string","event_ids":["string"],"lesson_text":"string","confidence":"string — high|med|low","scope":"string","status":"string — proposed|accepted|rejected"}
+{"id":"string","event_ids":["string"],"lesson_text":"string","confidence":"string — high|med|low","scope":"string","status":"string — proposed|accepted|rejected","failure_phase":"string — planning|execution|response|null","causal_grounding":"string — what|what+why|what+why+when"}
 ```
+
+The `causal_grounding` field (added v2.8.0) tracks whether the lesson includes:
+- `what`: Only what happened (low confidence, held for more evidence)
+- `what+why`: What + causal mechanism (medium confidence)
+- `what+why+when`: Full elaborative interrogation (high confidence, can produce shifts immediately)
 
 ## BehaviorShift
 ```json
-{"id":"string","source_lesson_ids":["string"],"shift_text":"string","status":"string — proposed|active|merged|expired|rejected","activation_reason":"string","created_at":"string","last_reviewed_at":"string","expiry_condition":"string|null","priority":"number"}
+{"id":"string","source_lesson_ids":["string"],"shift_text":"string","status":"string — proposed|active|merged|expired|rejected","activation_reason":"string","created_at":"string","last_reviewed_at":"string","expiry_condition":"string|null","priority":"number","last_reinforced_at":"string","reinforcement_count":"number","failure_phase":"string — planning|execution|response|null"}
 ```
+
+New fields (added v2.8.0):
+- `last_reinforced_at`: ISO timestamp of last successful application. Used for decay tracking.
+- `reinforcement_count`: Number of times this shift was successfully applied. Higher count = longer half-life.
+- `failure_phase`: Which phase this shift targets. Prevents mixing phase targeting.
 
 ## Debrief
 ```json
@@ -44,15 +56,18 @@
 ```json
 {
   "skill_id": "ocas-praxis",
-  "skill_version": "2.4.0",
+  "skill_version": "2.8.0",
   "config_version": "1",
   "created_at": "",
   "updated_at": "",
   "shifts": {
-    "max_active": 12
+    "max_active": 12,
+    "decay_days": 14,
+    "stale_days": 7
   },
   "lessons": {
-    "min_pattern_count": 2
+    "min_pattern_count": 3,
+    "phase_aligned_min": 2
   },
   "retention": {
     "days": 0,
@@ -60,6 +75,12 @@
   }
 }
 ```
+
+Config changes in v2.8.0:
+- `shifts.decay_days`: Days without reinforcement before auto-expiry (default: 14)
+- `shifts.stale_days`: Days without reinforcement before flagged as stale (default: 7)
+- `lessons.min_pattern_count`: Raised from 2 to 3 (cognitive science: 3+ for reliable pattern)
+- `lessons.phase_aligned_min`: 2+ events in same failure phase can produce a shift (sharper signal)
 
 ## OKRs
 
@@ -97,7 +118,21 @@ skill_okrs:
     direction: maximize
     target: 0.99
     evaluation_window: 30_runs
+  - name: shift_decay_health
+    metric: fraction of expired shifts that were decayed (not manually rejected)
+    direction: maximize
+    target: 0.80
+    evaluation_window: 30_runs
+  - name: causal_grounding_rate
+    metric: fraction of accepted lessons with what+why+when grounding
+    direction: maximize
+    target: 0.70
+    evaluation_window: 30_runs
 ```
+
+New OKRs in v2.8.0:
+- `shift_decay_health`: Measures whether the decay mechanism is working — shifts should expire naturally when not reinforced, not pile up until manually cleaned.
+- `causal_grounding_rate`: Tracks lesson quality — grounded lessons produce better shifts.
 
 ## Cron registration commands
 
@@ -105,9 +140,12 @@ Used during `praxis.init` to register background cron jobs:
 
 ```bash
 hermes cron create --name "praxis:journal_ingest" --schedule "*/30 * * * *" --prompt "Run praxis journal ingestion: scan all skill journals for new entries, extract behavioral signals, record events and lessons. Target: {agent_root}/commons/journals/"
-hermes cron create --name "praxis:debrief" --schedule "0 6 * * *" --prompt "Run praxis debrief: review past 24h of events and lessons, propose/activate behavior shifts if patterns detected, generate debrief."
+hermes cron create --name "praxis:debrief" --schedule "0 6 * * *" --prompt "Run praxis debrief: review past 24h of events and lessons, propose/activate behavior shifts if patterns detected, check shift decay status, generate debrief."
+hermes cron create --name "praxis:decay_check" --schedule "0 12 * * *" --prompt "Run praxis decay check: review all active shifts, check last_reinforced_at against decay_days threshold, expire stale shifts, flag shifts approaching expiry."
 hermes cron create --name "praxis:update" --schedule "0 0 * * *" --prompt "praxis.update"
 ```
+
+New in v2.8.0: `praxis:decay_check` runs at noon daily to check shift reinforcement status and expire decayed shifts before the daily debrief.
 
 ## Self-update procedure
 
