@@ -1,15 +1,29 @@
 # Praxis Data Model
 
 ## Event
+
+Events in practice use one of two schemas depending on when they were recorded. Both are valid:
+
+**v2.8+ schema (preferred):**
 ```json
-{"id":"string","timestamp":"string","domain":"string","context_summary":"string","outcome_type":"string — success|failure|correction|observation","outcome_summary":"string","evidence":["string"],"user_visible_impact":"string","failure_phase":"string — planning|execution|response|null"}
+{"event_id":"string","timestamp":"string","domain":"string","context_summary":"string","outcome_type":"string — success|failure|correction|observation","outcome_summary":"string","evidence":["string"],"failure_phase":"string — planning|execution|response|null","user_relevance":"string — user|agent_only|unknown"}
 ```
+
+**Legacy schema (still present in events.jsonl):**
+```json
+{"id":"string","timestamp":"string","source":"string","pattern":"string","pattern_category":"string","description":"string","confidence":"number","severity":"string — low|medium|high|tier_2","context_summary":"string","outcome_type":"string","outcome_summary":"string","evidence":["string"],"failure_phase":"string"}
+```
+
+Key differences: legacy events have `source` and `pattern` at top level and use `id` instead of `event_id`. New events use `domain` (broader than `source`) and encode pattern info in `context_summary`. When processing events for lesson extraction, normalize by reading both shapes — use `event_id || id` and `domain || source`.
 
 The `failure_phase` field (added v2.8.0) tags the task phase where the failure occurred. This enables phase-specific lesson extraction and shift targeting. See `lesson_rules.md` for phase-aligned extraction rules.
 
 ## MicroLesson
+
+The schema below is the canonical definition. In practice, lesson records use `lesson_text` for the human-readable summary AND `what`/`why`/`when` as structured elaborative interrogation fields. Both coexist in the same record — `what`/`why`/`when` are not replacements for `lesson_text`, they enrich it.
+
 ```json
-{"id":"string","event_ids":["string"],"lesson_text":"string","confidence":"string — high|med|low","scope":"string","status":"string — proposed|accepted|rejected","failure_phase":"string — planning|execution|response|null","causal_grounding":"string — what|what+why|what+why+when"}
+{"id":"string","event_ids":["string"],"lesson_text":"string","confidence":"string — high|med|low","scope":"string","status":"string — proposed|accepted|rejected","failure_phase":"string — planning|execution|response|null","causal_grounding":"string — what|what+why|what+why+when","what":"string — optional, elaborative interrogation: what pattern occurred","why":"string — optional, elaborative interrogation: causal mechanism","when":"string — optional, elaborative interrogation: boundary conditions"}
 ```
 
 The `causal_grounding` field (added v2.8.0) tracks whether the lesson includes:
@@ -53,21 +67,27 @@ New fields (added v2.8.0):
 
 ## Default config.json
 
+> **Note (v3.0.0):** The running config has evolved beyond v2.8.0. The schema below reflects v3.0.0 fields. SKILL.md frontmatter may reference an older version.
+
 ```json
 {
   "skill_id": "ocas-praxis",
-  "skill_version": "2.8.0",
-  "config_version": "1",
+  "skill_version": "3.0.0",
+  "config_version": "2",
   "created_at": "",
   "updated_at": "",
   "shifts": {
     "max_active": 12,
-    "decay_days": 14,
-    "stale_days": 7
+    "ttl_days": 14,
+    "proposed_ttl_days": 7,
+    "auto_expire_enabled": true
   },
   "lessons": {
-    "min_pattern_count": 3,
-    "phase_aligned_min": 2
+    "min_pattern_count": 2,
+    "high_confidence_threshold": 0.9,
+    "high_confidence_min_count": 1,
+    "user_correction_min_count": 1,
+    "pattern_categories_enabled": true
   },
   "retention": {
     "days": 0,
@@ -76,11 +96,21 @@ New fields (added v2.8.0):
 }
 ```
 
-Config changes in v2.8.0:
-- `shifts.decay_days`: Days without reinforcement before auto-expiry (default: 14)
-- `shifts.stale_days`: Days without reinforcement before flagged as stale (default: 7)
-- `lessons.min_pattern_count`: Raised from 2 to 3 (cognitive science: 3+ for reliable pattern)
-- `lessons.phase_aligned_min`: 2+ events in same failure phase can produce a shift (sharper signal)
+Config changes in v3.0.0:
+- `shifts.ttl_days` replaces `shifts.decay_days` (same semantics, clearer name)
+- `shifts.proposed_ttl_days`: Days a proposed shift can remain proposed before auto-rejection (default: 7)
+- `shifts.auto_expire_enabled`: Master switch for automatic shift expiry (default: true)
+- `lessons.min_pattern_count`: Lowered to 2 (empirically, 2 same-phase events suffice)
+- `lessons.high_confidence_threshold`: Confidence score above which a single event can produce a shift (default: 0.9)
+- `lessons.high_confidence_min_count`: Events above threshold needed for single-event shift (default: 1)
+- `lessons.user_correction_min_count`: User corrections always N=1 (immediate lesson)
+- `lessons.pattern_categories_enabled`: Enable pattern_category tagging on events (default: true)
+- Removed `shifts.stale_days` and `lessons.phase_aligned_min` (absorbed into category logic)
+
+Legacy v2.8.0 fields (no longer used):
+- `shifts.decay_days` → replaced by `shifts.ttl_days`
+- `shifts.stale_days` → removed (auto_expire handles this)
+- `lessons.phase_aligned_min` → absorbed into `pattern_categories_enabled`
 
 ## OKRs
 
