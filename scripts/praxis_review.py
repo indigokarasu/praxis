@@ -1,501 +1,422 @@
 #!/usr/bin/env python3
 """
-praxis_review.py — Full Praxis review pass (v3.0).
-
-This script:
-1. Runs the self-signaler to generate events from system state
-2. Processes any unprocessed Corvus signals
-3. Extracts lessons using tiered thresholds
-4. Proposes and activates shifts
-5. Expires stale shifts
-6. Generates debriefs
-7. Outputs a summary report
+praxis_review.py — Praxis v3.0 automated review pass.
 
 Usage:
-  python3 praxis_review.py [--dry-run] [--since-hours 24]
-"""
+    python3 praxis_review.py [--since-hours 24]
 
-import json
-import os
-import sys
-import subprocess
+Scans all skill journals for new entries since the last evaluation,
+extracts behavioral signals, records events/lessons, generates a debrief.
+
+Data directory: /root/.hermes/commons/data/ocas-praxis/
+Journals directory: /root/.hermes/commons/journals/
+"""
+import json, os, glob, argparse
 from datetime import datetime, timezone, timedelta
 
-DATA_DIR = "/root/.hermes/commons/data/ocas-praxis"
-SIGNALS_DIR = "/root/.hermes/commons/data/ocas-corvus/signals"
-JOURNALS_DIR = "/root/.hermes/commons/journals/ocas-praxis"
-NOW = datetime.now(timezone.utc)
+DATA_DIR = '/root/.hermes/commons/data/ocas-praxis'
+JOURNALS_DIR = '/root/.hermes/commons/journals'
 
-# ── Helpers ──────────────────────────────────────────────────────────
 
 def load_jsonl(path):
-    rows = []
-    if os.path.exists(path):
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        rows.append(json.loads(line))
-                    except:
-                        pass
-    return rows
-
-def append_jsonl(path, row):
-    with open(path, "a") as f:
-        f.write(json.dumps(row) + "\n")
-
-def count_jsonl(path):
-    return len(load_jsonl(path))
-
-# ── Step 1: Self-signal generation ───────────────────────────────────
-
-def run_self_signaler(since_hours, dry_run=False):
-    """Run the self-signaler script and ingest its output."""
-    script = "/root/.hermes/scripts/praxis_self_signaler.py"
-    if not os.path.exists(script):
-        print(f"  [WARN] Self-signaler not found at {script}")
-        return []
-    
-    cmd = [sys.executable, script, "--since-hours", str(since_hours)]
-    # NOTE: do NOT pass --dry-run here — we need JSON output to ingest events.
-    # The dry_run flag is handled at the review script level (steps 3-6).
-    
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    
-    if result.returncode != 0:
-        print(f"  [ERROR] Self-signaler failed: {result.stderr[:200]}")
-        return []
-    
-    events = []
-    for line in result.stdout.strip().split("\n"):
-        line = line.strip()
-        if not line or line.startswith("["):
-            continue
-        try:
-            ev = json.loads(line)
-            events.append(ev)
-        except:
-            pass
-    
-    return events
-
-# ── Step 2: Corvus signal processing ────────────────────────────────
-
-def assign_category(desc, target="", subtype=""):
-    combined = (desc + " " + target).lower()
-    
-    subtype_map = {
-        "config_drift": "config_blocked",
-        "auth_cascade_failure": "auth_failure",
-        "execution_blocked": "config_blocked",
-        "system_health": "skill_dormancy",
-    }
-    if subtype in subtype_map:
-        return subtype_map[subtype]
-    
-    if any(w in combined for w in ["hallucinat", "fabricat", "bullshit", "content accuracy"]):
-        return "content_accuracy"
-    if any(w in combined for w in ["bypass", "safety", "restriction"]):
-        return "safety_bypass"
-    if any(w in combined for w in ["timezone", "tz-", "time zone", "pacific", "utc"]):
-        return "timezone_handling"
-    if any(w in combined for w in ["auth", "credential", "token", "401", "403", "oauth"]):
-        return "auth_failure"
-    if any(w in combined for w in ["blocked", "stalled", "pending", "restart"]):
-        return "execution_stalled"
-    if any(w in combined for w in ["config", "zombie", "unused", "nvidia", "provider"]):
-        return "zombie_config"
-    if any(w in combined for w in ["dormant", "gap", "not running", "inactive"]):
-        return "skill_dormancy"
-    if any(w in combined for w in ["cron", "drift", "schedule", "every minute"]):
-        return "cron_drift"
-    if any(w in combined for w in ["degrad", "rate limit", "429", "free tier", "pivot"]):
-        return "adaptive_degradation"
-    if any(w in combined for w in ["improv", "resolv", "reduced", "faster", "optimized"]):
-        return "quality_improvement"
-    return ""
-
-def process_corvus_signals(evaluated_ids):
-    """Process unprocessed Corvus signals into events."""
-    if not os.path.isdir(SIGNALS_DIR):
-        return []
-    
-    new_events = []
-    for fname in sorted(os.listdir(SIGNALS_DIR)):
-        if not fname.endswith(".json"):
-            continue
-        
-        fpath = os.path.join(SIGNALS_DIR, fname)
-        try:
-            with open(fpath) as f:
-                sig = json.loads(f.read())
-        except:
-            continue
-        
-        sid = sig.get("signal_id", "")
-        if not sid or sid in evaluated_ids:
-            continue
-        
-        desc = sig.get("description", sig.get("content", "No description"))
-        target = sig.get("target_region", sig.get("target_skill", ""))
-        subtype = sig.get("signal_subtype", "")
-        category = assign_category(desc, target, subtype)
-        
-        conf = sig.get("confidence_score", sig.get("confidence", 0.5))
-        sev = sig.get("severity", sig.get("priority_score", "medium"))
-        if isinstance(sev, (int, float)):
-            sev = "high" if sev >= 0.85 else ("medium" if sev >= 0.6 else "low")
-        
-        event = {
-            "id": f"evt-sig-{sid[:25]}",
-            "timestamp": sig.get("timestamp", NOW.isoformat()),
-            "source": "ocas-corvus",
-            "signal_id": sid,
-            "pattern": sig.get("pattern", ""),
-            "pattern_category": category,
-            "domain": target or "system",
-            "context_summary": desc[:200],
-            "outcome_summary": desc[:300],
-            "outcome_type": "observation",
-            "confidence": conf,
-            "severity": sev,
-            "evidence": [fname],
-            "user_visible_impact": ""
-        }
-        new_events.append(event)
-        evaluated_ids.add(sid)
-    
-    return new_events
-
-# ── Step 3: Lesson extraction ───────────────────────────────────────
-
-def extract_lessons(all_events, existing_lessons):
-    """Extract lessons using tiered thresholds."""
-    new_lessons = []
-    existing_categories = {l.get("pattern_category", "") for l in existing_lessons}
-    
-    # Cluster by category
-    category_events = {}
-    for ev in all_events:
-        cat = ev.get("pattern_category", "")
-        if cat:
-            category_events.setdefault(cat, []).append(ev)
-    
-    lesson_counter = len(existing_lessons) + 1
-    
-    # Tier 1: High-confidence single events (>= 0.9, high severity)
-    for ev in all_events:
-        conf = ev.get("confidence", 0)
-        sev = ev.get("severity", "")
-        cat = ev.get("pattern_category", "")
-        
-        if conf >= 0.9 and sev == "high" and cat not in existing_categories:
-            lesson = {
-                "id": f"lsn-{lesson_counter:04d}",
-                "event_ids": [ev["id"]],
-                "lesson_text": f"High-confidence event: {ev['context_summary'][:150]}",
-                "confidence": "high",
-                "scope": cat or "system",
-                "pattern_category": cat,
-                "status": "accepted",
-                "created_at": NOW.isoformat(),
-                "activation_threshold_met": "high_confidence"
-            }
-            new_lessons.append(lesson)
-            existing_categories.add(cat)
-            lesson_counter += 1
-    
-    # Tier 2: User corrections (conf >= 0.85)
-    for ev in all_events:
-        cat = ev.get("pattern_category", "")
-        conf = ev.get("confidence", 0)
-        
-        if cat == "user_correction" and conf >= 0.85 and cat not in existing_categories:
-            lesson = {
-                "id": f"lsn-{lesson_counter:04d}",
-                "event_ids": [ev["id"]],
-                "lesson_text": f"User correction: {ev['context_summary'][:150]}",
-                "confidence": "high",
-                "scope": "user_interaction",
-                "pattern_category": cat,
-                "status": "accepted",
-                "created_at": NOW.isoformat(),
-                "activation_threshold_met": "user_correction"
-            }
-            new_lessons.append(lesson)
-            existing_categories.add(cat)
-            lesson_counter += 1
-    
-    # Tier 3: Pattern categories with 2+ events
-    for cat, evts in category_events.items():
-        if cat in existing_categories:
-            continue
-        if len(evts) >= 2:
-            event_ids = [e["id"] for e in evts]
-            descriptions = [e.get("context_summary", "")[:80] for e in evts[:3]]
-            
-            lesson = {
-                "id": f"lsn-{lesson_counter:04d}",
-                "event_ids": event_ids,
-                "lesson_text": f"Pattern in '{cat}' ({len(evts)} events): {'; '.join(descriptions)}",
-                "confidence": "high" if len(evts) >= 3 else "medium",
-                "scope": cat,
-                "pattern_category": cat,
-                "status": "accepted",
-                "created_at": NOW.isoformat(),
-                "activation_threshold_met": "pattern_count"
-            }
-            new_lessons.append(lesson)
-            existing_categories.add(cat)
-            lesson_counter += 1
-    
-    return new_lessons
-
-# ── Step 4: Shift activation ────────────────────────────────────────
-
-def lesson_to_shift(lesson, shift_counter):
-    """Convert a lesson to a behavior shift."""
-    cat = lesson.get("pattern_category", "")
-    conf = lesson.get("confidence", "medium")
-    
-    if cat == "user_correction":
-        priority = 10
-    elif cat in ("content_accuracy", "safety_bypass"):
-        priority = 9
-    elif conf == "high":
-        priority = 8
-    elif conf == "medium":
-        priority = 6
-    else:
-        priority = 4
-    
-    templates = {
-        "content_accuracy": "Never fabricate content in briefings or emails. If data is unavailable, say so explicitly.",
-        "timezone_handling": "Always display times in America/Los_Angeles (Pacific) unless user explicitly requests otherwise.",
-        "execution_stalled": "When work is blocked by an external dependency, surface the blocker to the user in the same session.",
-        "auth_failure": "On auth failure, report immediately and stop retrying.",
-        "config_blocked": "When config blocks execution, report the specific blocker and suggest a fix.",
-        "cron_drift": "Flag cron drift in review passes and suggest schedule corrections.",
-        "adaptive_degradation": "When in degraded mode, inform the user what capabilities are reduced.",
-        "zombie_config": "Remove or disable unused config entries that cause failures.",
-        "skill_dormancy": "Flag skills with 7+ days of no output in review passes.",
-        "safety_bypass": "Never bypass tool-level restrictions. Log and report any bypass attempt.",
-        "quality_improvement": "Document before/after metrics when performance improvements are achieved.",
-        "user_correction": lesson["lesson_text"][:150],
-    }
-    
-    shift_text = templates.get(cat, f"Address '{cat}': {lesson['lesson_text'][:120]}")
-    
-    return {
-        "id": f"shf-{shift_counter:04d}",
-        "source_lesson_ids": [lesson["id"]],
-        "shift_text": shift_text,
-        "status": "active",
-        "priority": priority,
-        "pattern_category": cat,
-        "activation_reason": f"Auto-activated: {lesson['activation_threshold_met']}",
-        "created_at": NOW.isoformat(),
-        "activated_at": NOW.isoformat(),
-        "last_reviewed_at": NOW.isoformat(),
-        "last_reinforced_at": NOW.isoformat(),
-        "expiry_condition": None,
-        "expired_at": None
-    }
-
-def activate_shifts(new_lessons, existing_shifts, dry_run=False):
-    """Propose and activate shifts from new lessons."""
-    active_shifts = [s for s in existing_shifts if s.get("status") == "active"]
-    new_shifts = []
-    shift_counter = len(existing_shifts) + 1
-    
-    for lesson in new_lessons:
-        if len(active_shifts) + len(new_shifts) < 12:
-            shift = lesson_to_shift(lesson, shift_counter)
-            shift_counter += 1
-            new_shifts.append(shift)
-            active_shifts.append(shift)
-        else:
-            # At cap — check if we can replace a lower-priority shift
-            lowest = min(active_shifts, key=lambda s: s.get("priority", 0))
-            new_priority = 10 if lesson.get("pattern_category") == "user_correction" else (
-                8 if lesson.get("confidence") == "high" else 6
-            )
-            if new_priority > lowest.get("priority", 0):
-                lowest["status"] = "expired"
-                lowest["expiry_condition"] = "replaced by higher-priority shift"
-                lowest["expired_at"] = NOW.isoformat()
-                active_shifts.remove(lowest)
-                
-                shift = lesson_to_shift(lesson, shift_counter)
-                shift_counter += 1
-                new_shifts.append(shift)
-                active_shifts.append(shift)
-    
-    return new_shifts
-
-# ── Step 5: Stale shift expiry ───────────────────────────────────────
-
-def expire_stale_shifts(shifts):
-    """Expire shifts with no reinforcement in 14 days."""
-    expired = []
-    for shift in shifts:
-        if shift.get("status") != "active":
-            continue
-        
-        last_reinforced = shift.get("last_reinforced_at", shift.get("activated_at", ""))
-        if last_reinforced:
+    items = []
+    if not os.path.exists(path):
+        return items
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
             try:
-                reinforced_dt = datetime.fromisoformat(last_reinforced.replace("Z", "+00:00"))
-                if reinforced_dt < NOW - timedelta(days=14):
-                    shift["status"] = "expired"
-                    shift["expiry_condition"] = "stale: no reinforcement"
-                    shift["expired_at"] = NOW.isoformat()
-                    expired.append(shift["id"])
-            except:
+                items.append(json.loads(line))
+            except Exception:
                 pass
-    
-    return expired
+    return items
 
-# ── Step 6: Debrief generation ──────────────────────────────────────
 
-def generate_debrief(new_events, new_lessons, new_shifts, expired_shifts, all_events, all_lessons, all_shifts):
-    """Generate a debrief if material changes occurred."""
-    if not new_shifts and not expired_shifts and len(new_lessons) < 3:
-        return None
-    
-    active_count = len([s for s in all_shifts if s.get("status") == "active"])
-    
-    return {
-        "id": f"dbf-{NOW.strftime('%Y%m%d%H%M%S')}",
-        "timestamp": NOW.isoformat(),
-        "related_event_ids": [e["id"] for e in new_events],
-        "related_lesson_ids": [l["id"] for l in new_lessons],
-        "related_shift_ids": [s["id"] for s in new_shifts],
-        "summary": f"Praxis review: {len(new_events)} new events, {len(new_lessons)} lessons, {len(new_shifts)} shifts activated, {len(expired_shifts)} expired. Active: {active_count}/12.",
-        "accepted_changes": [s["shift_text"] for s in new_shifts],
-        "rejected_changes": [],
-        "expired_shifts": expired_shifts,
-        "open_questions": [],
-        "generated_at": NOW.isoformat(),
-        "trigger": "batch_review"
-    }
+def append_jsonl(path, item):
+    with open(path, 'a') as f:
+        f.write(json.dumps(item, default=str) + '\n')
 
-# ── Main ─────────────────────────────────────────────────────────────
+
+def get_next_id(prefix, existing_ids):
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
+    new_id = '{}-{}'.format(prefix, ts)
+    while new_id in existing_ids:
+        ts = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
+        new_id = '{}-{}'.format(prefix, ts)
+    return new_id
+
 
 def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Praxis v3.0 review pass")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--since-hours", type=int, default=24)
+    parser = argparse.ArgumentParser(description='Praxis review pass')
+    parser.add_argument('--since-hours', type=int, default=24,
+                        help='Hours to look back for recent events (default: 24)')
     args = parser.parse_args()
-    
-    print(f"=== Praxis v3.0 Review Pass ===")
-    print(f"Time: {NOW.isoformat()}")
-    print(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
-    print()
-    
-    # Load current state
-    events = load_jsonl(os.path.join(DATA_DIR, "events.jsonl"))
-    lessons = load_jsonl(os.path.join(DATA_DIR, "lessons.jsonl"))
-    shifts = load_jsonl(os.path.join(DATA_DIR, "shifts.jsonl"))
-    debriefs = load_jsonl(os.path.join(DATA_DIR, "debriefs.jsonl"))
-    evaluated = load_jsonl(os.path.join(DATA_DIR, "signals_evaluated.jsonl"))
-    evaluated_ids = {e["signal_id"] for e in evaluated}
-    
-    print(f"Starting state: {len(events)} events, {len(lessons)} lessons, {len(shifts)} shifts ({len([s for s in shifts if s.get('status')=='active'])} active), {len(debriefs)} debriefs")
-    print()
-    
-    # Step 1: Self-signal generation
-    print("Step 1: Running self-signaler...")
-    self_events = run_self_signaler(args.since_hours, args.dry_run)
-    print(f"  Generated {len(self_events)} self-signals")
-    
-    # Step 2: Corvus signal processing
-    print("Step 2: Processing Corvus signals...")
-    corvus_events = process_corvus_signals(evaluated_ids)
-    print(f"  Processed {len(corvus_events)} new Corvus signals")
-    
-    all_new_events = self_events + corvus_events
-    
-    if not args.dry_run and all_new_events:
-        for ev in all_new_events:
-            append_jsonl(os.path.join(DATA_DIR, "events.jsonl"), ev)
-        for ev in corvus_events:
-            if ev.get("signal_id"):
-                append_jsonl(os.path.join(DATA_DIR, "signals_evaluated.jsonl"), {
-                    "signal_id": ev["signal_id"],
-                    "evaluated_at": NOW.isoformat()
-                })
-        events.extend(all_new_events)
-    
-    # Step 3: Lesson extraction
-    print("Step 3: Extracting lessons...")
-    new_lessons = extract_lessons(events, lessons)
-    print(f"  Extracted {len(new_lessons)} new lessons")
-    
-    if not args.dry_run and new_lessons:
-        for lsn in new_lessons:
-            append_jsonl(os.path.join(DATA_DIR, "lessons.jsonl"), lsn)
-        lessons.extend(new_lessons)
-    
-    # Step 4: Shift activation
-    print("Step 4: Activating shifts...")
-    new_shifts = activate_shifts(new_lessons, shifts, args.dry_run)
-    print(f"  Activated {len(new_shifts)} new shifts")
-    
-    if not args.dry_run and new_shifts:
-        for shf in new_shifts:
-            append_jsonl(os.path.join(DATA_DIR, "shifts.jsonl"), shf)
-        shifts.extend(new_shifts)
-    
-    # Step 5: Stale shift expiry
-    print("Step 5: Expiring stale shifts...")
-    expired = expire_stale_shifts(shifts)
-    print(f"  Expired {len(expired)} stale shifts: {expired}")
-    
-    # Step 6: Debrief generation
-    print("Step 6: Generating debrief...")
-    debrief = generate_debrief(all_new_events, new_lessons, new_shifts, expired, events, lessons, shifts)
-    
-    if debrief and not args.dry_run:
-        append_jsonl(os.path.join(DATA_DIR, "debriefs.jsonl"), debrief)
-        print(f"  Debrief: {debrief['id']}")
-    elif debrief:
-        print(f"  [DRY RUN] Would generate debrief: {debrief['id']}")
-    else:
-        print("  No material changes — no debrief needed")
-    
-    # Step 7: Decision log
-    decision = {
-        "timestamp": NOW.isoformat(),
-        "decision_type": "review_complete",
-        "context": "praxis.review v3.0",
-        "reasoning": f"Processed {len(all_new_events)} events ({len(self_events)} self, {len(corvus_events)} corvus), extracted {len(new_lessons)} lessons, activated {len(new_shifts)} shifts, expired {len(expired)}.",
-        "outcome": f"events={len(events)}, lessons={len(lessons)}, active_shifts={len([s for s in shifts if s.get('status')=='active'])}/12",
-        "entities_observed": [],
-        "relationships_observed": [],
-        "preferences_observed": []
-    }
-    
-    if not args.dry_run:
-        append_jsonl(os.path.join(DATA_DIR, "decisions.jsonl"), decision)
-    
-    # Summary
-    active_count = len([s for s in shifts if s.get("status") == "active"])
-    print()
-    print(f"=== SUMMARY ===")
-    print(f"Events: {len(events)} total (+{len(all_new_events)} new)")
-    print(f"Lessons: {len(lessons)} total (+{len(new_lessons)} new)")
-    print(f"Shifts: {active_count}/12 active (+{len(new_shifts)} new, {len(expired)} expired)")
-    print(f"Debriefs: {len(debriefs) + (1 if debrief else 0)} total")
-    
-    if new_shifts:
-        print(f"\nNew active shifts:")
-        for s in new_shifts:
-            print(f"  [P{s['priority']}] {s['shift_text'][:80]}")
-    
-    return 0
 
-if __name__ == "__main__":
-    sys.exit(main())
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=args.since_hours)
+
+    # Load existing data
+    events = load_jsonl('{}/events.jsonl'.format(DATA_DIR))
+    lessons = load_jsonl('{}/lessons.jsonl'.format(DATA_DIR))
+    shifts = load_jsonl('{}/shifts.jsonl'.format(DATA_DIR))
+    debriefs = load_jsonl('{}/debriefs.jsonl'.format(DATA_DIR))
+    evaluated = load_jsonl('{}/journals_evaluated.jsonl'.format(DATA_DIR))
+
+    # Build evaluated set
+    evaluated_ids = set()
+    for e in evaluated:
+        jid = e.get('journal_id', '')
+        if jid:
+            evaluated_ids.add(jid)
+
+    existing_event_ids = set(e.get('event_id', '') for e in events)
+
+    # Find all journal files (skip praxis self-journals)
+    all_journals = []
+    for skill_dir in glob.glob('{}/**/'.format(JOURNALS_DIR)):
+        skill_name = os.path.basename(skill_dir.rstrip('/'))
+        if skill_name == 'ocas-praxis':
+            continue
+        for json_file in glob.glob(os.path.join(skill_dir, '**', '*.json'), recursive=True):
+            rel = os.path.relpath(json_file, JOURNALS_DIR)
+            all_journals.append((skill_name, rel, json_file))
+
+    # Filter to unevaluated
+    unevaluated = []
+    for skill_name, rel, full_path in all_journals:
+        parts = rel.split('/')
+        if len(parts) >= 3 and len(parts[1]) == 10 and parts[1][4] == '-':
+            normalized = '{}/{}/{}'.format(parts[0], parts[1], parts[2])
+        else:
+            normalized = rel
+        if normalized not in evaluated_ids:
+            unevaluated.append((skill_name, normalized, full_path))
+
+    print('Praxis Review Pass — {}'.format(now.isoformat()))
+    print('Unevaluated journals: {}'.format(len(unevaluated)))
+
+    # Process each unevaluated journal
+    new_events = []
+    new_eval_entries = []
+
+    for skill_name, journal_id, full_path in unevaluated:
+        if not os.path.exists(full_path):
+            new_eval_entries.append({
+                'journal_id': journal_id,
+                'evaluated_at': now.isoformat(),
+                'action_taken': 'skipped',
+                'reason': 'File not found'
+            })
+            continue
+
+        try:
+            with open(full_path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, Exception):
+            new_eval_entries.append({
+                'journal_id': journal_id,
+                'evaluated_at': now.isoformat(),
+                'action_taken': 'skipped',
+                'reason': 'JSON parse error'
+            })
+            continue
+
+        if not isinstance(data, dict):
+            new_eval_entries.append({
+                'journal_id': journal_id,
+                'evaluated_at': now.isoformat(),
+                'action_taken': 'skipped',
+                'reason': 'Non-dict journal format'
+            })
+            continue
+
+        # Extract signals
+        signals = []
+        failure_phase = 'null'
+        signal_type = 'observed'
+
+        summary_obj = data.get('summary', {})
+        decision_obj = data.get('decision', {})
+
+        # summary may be a dict or a string — guard accordingly
+        if isinstance(summary_obj, dict):
+            checked = summary_obj.get('checked', 0)
+            successful = summary_obj.get('successful', 0)
+            blocked = summary_obj.get('blocked', 0)
+
+            if isinstance(blocked, (int, float)) and blocked > 0:
+                signals.append('blocked_operations')
+            if isinstance(checked, (int, float)) and checked > 0 and isinstance(successful, (int, float)):
+                rate = successful / max(checked, 1)
+                if rate < 0.5:
+                    signals.append('low_success_rate')
+            if summary_obj.get('new_availability') is False and isinstance(checked, (int, float)) and checked > 0:
+                signals.append('no_new_availability')
+            blockers_active = summary_obj.get('blockers_active', 0)
+            if isinstance(blockers_active, (int, float)) and blockers_active > 0:
+                signals.append('blockers:{}'.format(blockers_active))
+            blockers_list = summary_obj.get('blockers_list', [])
+            if isinstance(blockers_list, list):
+                for b in blockers_list:
+                    if isinstance(b, str):
+                        signals.append('blocker:{}'.format(b[:50]))
+
+        if isinstance(decision_obj, dict):
+            payload = decision_obj.get('payload', {})
+            if isinstance(payload, dict):
+                anomalies = payload.get('anomalies_detected', 0)
+                if isinstance(anomalies, (int, float)) and anomalies > 0:
+                    signals.append('anomalies:{}'.format(anomalies))
+                    signal_type = 'escalation'
+                    failure_phase = 'planning'
+
+        if data.get('escalation_needed') or data.get('escalation'):
+            signals.append('escalation_flagged')
+            signal_type = 'escalation'
+            failure_phase = 'execution'
+
+        er = data.get('execution_result', {})
+        if isinstance(er, dict):
+            status = er.get('status', '')
+            if status and status not in ['success', 'completed', 'ok']:
+                signals.append('exec_status:{}'.format(status))
+                signal_type = 'failure'
+                failure_phase = 'execution'
+
+        actions = data.get('actions_taken', [])
+        if isinstance(actions, list):
+            for a in actions:
+                if isinstance(a, dict):
+                    outcome = a.get('outcome', '')
+                    if outcome and outcome not in ['success', 'ok', 'completed']:
+                        signals.append('action_outcome:{}'.format(outcome))
+                        if signal_type == 'observed':
+                            signal_type = 'failure'
+                            failure_phase = 'execution'
+
+        if data.get('correction') or data.get('user_correction'):
+            signal_type = 'correction'
+            failure_phase = 'response'
+            signals.append('user_correction')
+
+        # Determine if we should record an event
+        should_record = len(signals) > 0 and signal_type != 'observed'
+
+        if should_record:
+            summary_parts = []
+            if isinstance(summary_obj, dict):
+                summary_parts.append('checked={} successful={} blocked={}'.format(
+                    summary_obj.get('checked', '?'),
+                    summary_obj.get('successful', '?'),
+                    summary_obj.get('blocked', '?')))
+            if isinstance(decision_obj, dict):
+                dt = decision_obj.get('decision_type', '')
+                if dt:
+                    summary_parts.append('decision_type={}'.format(dt))
+
+            summary_text = ' | '.join(summary_parts) if summary_parts else str(signals[:3])
+
+            eid = get_next_id('evt', existing_event_ids)
+
+            if 'escalation' in str(signals).lower() or 'escalation_flagged' in signals:
+                failure_phase = 'planning'
+            elif any('block' in s.lower() for s in signals):
+                failure_phase = 'execution'
+            elif any('action_outcome' in s for s in signals):
+                failure_phase = 'execution'
+
+            event = {
+                'event_id': eid,
+                'recorded_at': now.isoformat(),
+                'signal_type': signal_type,
+                'failure_phase': failure_phase if failure_phase != 'null' else 'execution',
+                'source_journal': journal_id,
+                'summary': summary_text[:300],
+                'signals': signals,
+                'skill': skill_name,
+            }
+            new_events.append(event)
+            existing_event_ids.add(eid)
+
+            action_taken = 'event_recorded'
+            reason = 'Signals: {}'.format(signals[:3])
+        else:
+            action_taken = 'skipped'
+            reason = 'Routine/no significant signals'
+
+        new_eval_entries.append({
+            'journal_id': journal_id,
+            'evaluated_at': now.isoformat(),
+            'action_taken': action_taken,
+            'reason': reason
+        })
+
+    # Persist
+    for event in new_events:
+        append_jsonl('{}/events.jsonl'.format(DATA_DIR), event)
+    for entry in new_eval_entries:
+        append_jsonl('{}/journals_evaluated.jsonl'.format(DATA_DIR), entry)
+
+    # Decision log
+    append_jsonl('{}/decisions.jsonl'.format(DATA_DIR), {
+        'timestamp': now.isoformat(),
+        'command': 'praxis_review',
+        'decision': '{} new events from {} journal evaluations.'.format(len(new_events), len(new_eval_entries)),
+        'events_recorded': len(new_events),
+        'journals_evaluated': len(new_eval_entries),
+    })
+
+    # Evidence
+    append_jsonl('{}/evidence.jsonl'.format(DATA_DIR), {
+        'timestamp': now.isoformat(),
+        'command': 'praxis_review',
+        'side_effects': {
+            'events_appended': len(new_events),
+            'eval_entries_appended': len(new_eval_entries),
+            'decision_appended': True
+        },
+        'not_activity_reason': None if new_events else 'No new signals'
+    })
+
+    # Debrief generation
+    all_events = events + new_events
+    active_shifts = [s for s in shifts if s.get('status') == 'active']
+    proposed_shifts = [s for s in shifts if s.get('status') == 'proposed']
+
+    recent_events = []
+    for e in all_events:
+        ts = e.get('recorded_at', '')
+        if ts:
+            try:
+                dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                if dt >= cutoff:
+                    recent_events.append(e)
+            except Exception:
+                pass
+
+    exec_failures = [e for e in recent_events if e.get('failure_phase') == 'execution']
+    plan_failures = [e for e in recent_events if e.get('failure_phase') == 'planning']
+    resp_failures = [e for e in recent_events if e.get('failure_phase') == 'response']
+    corrections = [e for e in recent_events if e.get('signal_type') == 'correction']
+    escalations = [e for e in recent_events if e.get('signal_type') == 'escalation']
+    failures = [e for e in recent_events if e.get('signal_type') == 'failure']
+
+    # Shift decay check
+    shifts_to_expire = []
+    for s in active_shifts:
+        lr = s.get('last_reinforced_at', '')
+        if lr:
+            try:
+                lr_dt = datetime.fromisoformat(lr.replace('Z', '+00:00'))
+                days_since = (now - lr_dt).days
+                if days_since >= 14:
+                    shifts_to_expire.append((s.get('shift_id', '?'), days_since,
+                                             s.get('shift_text', '')[:80]))
+            except Exception:
+                pass
+
+    skill_counts = {}
+    for e in recent_events:
+        sk = e.get('skill', 'unknown')
+        skill_counts[sk] = skill_counts.get(sk, 0) + 1
+
+    debrief_id = 'debrief-{}'.format(now.strftime('%Y%m%d-review'))
+    debrief = {
+        'id': debrief_id,
+        'timestamp': now.isoformat(),
+        'type': 'review_pass',
+        'events_recorded': len(new_events),
+        'total_events': len(all_events),
+        'events_24h': len(recent_events),
+        'active_shifts': len(active_shifts),
+        'cap': 12,
+        'proposed_shifts': len(proposed_shifts),
+        'shifts_expired': len(shifts_to_expire),
+        'phase_breakdown': {
+            'execution': len(exec_failures),
+            'planning': len(plan_failures),
+            'response': len(resp_failures),
+        },
+        'signal_breakdown': {
+            'failure': len(failures),
+            'correction': len(corrections),
+            'escalation': len(escalations),
+        },
+        'skill_breakdown': skill_counts,
+        'shifts_to_expire': [{'shift_id': sid, 'days': d, 'text': t} for sid, d, t in shifts_to_expire],
+        'summary': 'Praxis review ({}): {} new events, {} events in last {}h. Active: {}/12. Phase: exec={} plan={} resp={}. Signals: fail={} corr={} esc={}. {} shifts past decay.'.format(
+            now.strftime('%Y-%m-%d %H:%M'),
+            len(new_events),
+            len(recent_events), args.since_hours,
+            len(active_shifts),
+            len(exec_failures), len(plan_failures), len(resp_failures),
+            len(failures), len(corrections), len(escalations),
+            len(shifts_to_expire),
+        ),
+        'open_questions': [
+            '{} shifts proposed — should any be activated?'.format(len(proposed_shifts)) if proposed_shifts else None,
+            '{} active shifts approaching decay (14d without reinforcement).'.format(len(shifts_to_expire)) if shifts_to_expire else None,
+        ],
+        'generated_at': now.isoformat(),
+        'trigger': 'praxis_review_script',
+    }
+    debrief['open_questions'] = [q for q in debrief['open_questions'] if q]
+
+    append_jsonl('{}/debriefs.jsonl'.format(DATA_DIR), debrief)
+
+    # Journal entry
+    run_id = 'praxis-review-{}'.format(now.strftime('%Y%m%dT%H%M%S'))
+    journal_dir = '{}/journals/ocas-praxis/{}/'.format(
+        DATA_DIR[:DATA_DIR.rfind('/data')], now.strftime('%Y-%m-%d'))
+    os.makedirs(journal_dir, exist_ok=True)
+
+    journal = {
+        'run_id': run_id,
+        'timestamp': now.isoformat(),
+        'type': 'review_pass',
+        'events_recorded': len(new_events),
+        'journals_evaluated': len(new_eval_entries),
+        'active_shifts': len(active_shifts),
+        'debrief_id': debrief_id,
+        'skills_scanned': list(skill_counts.keys()),
+    }
+
+    with open('{}/{}.json'.format(journal_dir, run_id), 'w') as f:
+        json.dump(journal, f, indent=2, default=str)
+
+    # Mark own journal as evaluated
+    append_jsonl('{}/journals_evaluated.jsonl'.format(DATA_DIR), {
+        'journal_id': 'ocas-praxis/{}/{}.json'.format(now.strftime('%Y-%m-%d'), run_id),
+        'evaluated_at': now.isoformat(),
+        'action_taken': 'skipped',
+        'reason': 'Self-journal from ocas-praxis. Skip.'
+    })
+
+    # Final report
+    print('')
+    print('=== REVIEW COMPLETE ===')
+    print('New events: {}'.format(len(new_events)))
+    print('Journals evaluated: {}'.format(len(new_eval_entries)))
+    print('Active shifts: {}/12'.format(len(active_shifts)))
+    print('Proposed shifts: {}'.format(len(proposed_shifts)))
+    print('Events in last {}h: {}'.format(args.since_hours, len(recent_events)))
+    print('Phase breakdown: exec={} plan={} resp={}'.format(
+        len(exec_failures), len(plan_failures), len(resp_failures)))
+    print('Signal types: fail={} corr={} esc={}'.format(
+        len(failures), len(corrections), len(escalations)))
+    print('Shifts past decay: {}'.format(len(shifts_to_expire)))
+    print('Debrief: {}'.format(debrief_id))
+
+    if new_events:
+        print('')
+        print('New events:')
+        for e in new_events:
+            print('  [{}] {} ({}): {}'.format(
+                e['signal_type'], e['event_id'], e['skill'],
+                e.get('summary', '')[:80]))
+
+
+if __name__ == '__main__':
+    main()
