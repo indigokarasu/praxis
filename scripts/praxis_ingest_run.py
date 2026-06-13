@@ -276,16 +276,42 @@ def determine_failure_phase(signals):
             return phase
     return 'null'
 
+def check_disk_space():
+    """Abort early if disk is too full to safely write."""
+    stat = os.statvfs("/")
+    avail_mb = (stat.f_bavail * stat.f_frsize) / (1024 * 1024)
+    if avail_mb < 500:
+        print(f"  WARNING: Only {avail_mb:.0f}MB free on disk. Aborting to prevent data loss.")
+        print(f"  Run: apt-get clean && find /root -maxdepth 3 -type f -size +100M")
+        return False
+    return True
+
 def main():
     print(f"=== Praxis Journal Ingest — {now_iso()} ===\n")
 
-    # Step 1: Dedup eval file
-    print("[1/6] Deduplicating journals_evaluated.jsonl...")
+    # Pre-flight: disk space check
+    if not check_disk_space():
+        evidence = {
+            'evidence_id': generate_id('evid'),
+            'recorded_at': now_iso(),
+            'run_type': 'journal_ingest',
+            'not_activity_reason': 'aborted: disk_full',
+            'journals_total': 0,
+            'journals_new_processed': 0,
+            'events_recorded': 0,
+            'lessons_extracted': 0,
+            'active_shifts': 0,
+        }
+        append_jsonl(EVIDENCE_FILE, [evidence])
+        return
+
+    # Step 1: Dedup eval file (pre-scan hygiene)
+    print("[1/7] Deduplicating journals_evaluated.jsonl...")
     eval_records = dedup_eval_file()
     eval_ids = set(eval_records.keys())
 
-    # Step 2: Find all journals, diff against eval
-    print("[2/6] Scanning filesystem...")
+    # Step 2: Scan filesystem for new journals
+    print("[2/7] Scanning filesystem...")
     all_journals = find_all_journals()
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -308,7 +334,7 @@ def main():
     processed_sources = set()
 
     if unevaluated_recent:
-        print(f"\n[3/6] Processing {len(unevaluated_recent)} new journals...")
+        print(f"\n[3/7] Processing {len(unevaluated_recent)} new journals...")
         for full_path, canonical_id_str in sorted(unevaluated_recent):
             journal_data = read_journal(full_path)
             if not journal_data:
@@ -355,7 +381,7 @@ def main():
             print(f"  Marked {len(new_eval_entries)} journals evaluated")
 
     # Step 4: Post-write event dedup (MANDATORY - before lesson extraction)
-    print(f"\n[4/6] Post-write event dedup...")
+    print(f"\n[4/7] Post-write event dedup...")
     new_event_ids = set(e['event_id'] for e in new_events)
     removed_count = dedup_events_file(new_event_ids)
     if removed_count > 0:
@@ -364,7 +390,7 @@ def main():
         print(f"  No duplicate events found")
 
     # Step 5: Lesson extraction (AFTER dedup - source_event_ids will be valid)
-    print(f"\n[5/6] Running lesson extraction...")
+    print(f"\n[5/7] Running lesson extraction...")
     all_events = load_jsonl(EVENTS_FILE)
     pattern_groups = {}
     valid_event_ids = set()
@@ -439,7 +465,7 @@ def main():
         print(f"  No new patterns detected")
 
     # Step 6: Summary + evidence
-    print(f"\n[6/6] Writing evidence and summary...")
+    print(f"\n[6/7] Writing evidence and summary...")
     all_shifts = load_jsonl(SHIFTS_FILE)
     active_count = sum(1 for s in all_shifts if s.get('status') == 'active')
 
