@@ -1,15 +1,6 @@
 ---
 name: ocas-praxis
-description: >
-  Praxis: bounded behavioral refinement loop. Records outcomes, extracts micro-lessons
-  from repeated patterns, consolidates them into capped active behavior shifts, applies
-  shifts at runtime, and generates plain-language debriefs. Use when recording task
-  outcomes, extracting lessons from repeated patterns, managing active behavior shifts,
-  generating runtime briefs, or producing debriefs. Trigger phrases: "record outcome",
-  "extract lesson", "behavior shift", "what have I learned", "runtime brief",
-  "debrief", "update praxis". Do not use for general memory (use Elephas), preference
-  tracking (use Taste), real-time task execution, content generation, system health
-  monitoring (use Custodian), or skill evaluation scoring (use Mentor).
+description: 'Bounded behavioral refinement loop. Records outcomes, extracts micro-lessons from repeated patterns, consolidates them into capped active behavior shifts, applies shifts at runtime, and generates plain-language debriefs. Use for recording task outcomes, extracting lessons from repeated patterns, managing active behavior shifts, generating runtime briefs, or producing debriefs. Do not use for general memory (use Elephas), preference tracking (use Taste), real-time task execution, content generation, system health monitoring (use Custodian), or skill evaluation scoring (use Mentor).'
 license: MIT
 source: https://github.com/indigokarasu/praxis
 includes:
@@ -18,6 +9,11 @@ includes:
 metadata:
   author: Indigo Karasu (indigokarasu)
   version: 3.2.0
+tags:
+- behavioral-refinement
+- lessons
+- outcomes
+- OCAS-core
 triggers:
 - behavioral refinement
 - micro-lessons
@@ -179,11 +175,15 @@ See `references/gotchas-praxis.md` for the full gotcha catalog (30+ operational 
 
 Key gotchas:
 
+- **Dedup key must be `(source_journal, signal_type)`** — Using `source_journal` alone as the dedup key in `events.jsonl` post-write dedup collapses multiple distinct signals from the same journal into one event. In ingest_20260606_v3, finch scan-1800 produced both `cron_errors` and `auth_failure` signals, but only the first survived dedup — the second had to be recovered manually. This matches the known limitation documented in `ingest-script-pattern.md` §Post-Write Dedup. **Always dedup by `(source_journal, signal_type)`**, not just `source_journal`.
+- **Lesson content dedup required** — The `lesson_id` includes a random/timestamp component, so dedup by `lesson_id` alone does NOT prevent semantic duplicates. Each ingest run generates different IDs for the same `(signal_type, phase)` group. **Always dedup by `(signal_type, failure_phase)` content fingerprint before writing lessons.** See `ingest-script-pattern.md` §Lesson Content Dedup. Without this, `lessons.jsonl` grows by ~9-49 duplicate entries per run.
 - **Active shift cap is hard** — 12-shift cap enforced on every activation
 - **Lessons require causal grounding** — "do X because Y" not just "do X"
 - **Execute the fix, don't just summarize** — Actually update Y when you detect failure in X
-- **`execute_code` is blocked in cron context** — Use `terminal()` with heredoc for JSONL processing
+- **Initialize ALL accumulator variables before any loop or conditional** — `truly_new`, `remaining_proposals`, and any accumulator must be initialized before the `if`/`for` block that might define it. A variable assigned only inside a `for/else` body does not exist when the loop iterates 0 times, causing `NameError` after data writes have already completed.
+- **`execute_code` is blocked in cron context** — Use `terminal()` to run Python scripts. Do NOT use heredoc (`<< 'PYEOF'`) — shell metacharacters inside Python code (e.g., `&` in comparisons, backticks, `$()`) cause the shell to interpret them and the command fails with "Foreground command uses '&' backgrounding." The reliable pattern: **write the script to a `.py` file via `write_file()`, then execute it via `terminal(command="python3 /path/to/script.py")`. This works in both interactive and cron contexts.
 - **`write_file` OVERWRITES JSONL files** — Read-then-rewrite pattern required for appends
+- **Disk-full blocks ingest** — Check `df -h /` before running; abort if <1G free. Recovery: `apt-get clean`, remove stale scripts. See `references/gotchas-praxis.md` Disk and Environment section.
 - **Cross-skill contamination risk** — Verify Praxis content doesn't pick up artifacts from Finch
 - **Lesson suppression false-positive** — When checking if an existing lesson covers a new pattern, keyword matching against `lesson_text` is NOT sufficient. An `ocas-sands` lesson about "Google OAuth token missing" (planning phase) will incorrectly suppress a new `ocas-custodian` lesson about "Google OAuth revoked" (execution phase) because both contain "token". Match on `domain` + `failure_phase` + semantic scope, not keywords. Default to extracting the lesson when in doubt — dedup belongs in shift activation (merge-before-cap), not in lesson suppression.
 
