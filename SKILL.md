@@ -36,7 +36,7 @@ Praxis is the system's behavioral self-improvement loop — it records real task
 
 ## When NOT to Use
 
-- General knowledge storage — use Elephas
+- General knowledge storage — use memory tool
 - Preference tracking — use Taste
 - One-off trivia or domain facts
 - Broad autobiographical summaries
@@ -46,7 +46,7 @@ Praxis is the system's behavioral self-improvement loop — it records real task
 
 Praxis owns bounded behavioral refinement: events, lessons, shifts, and debriefs.
 
-Praxis does not own: general memory (Elephas), preference persistence (Taste), pattern discovery (Corvus), communications (Dispatch), skill evaluation (Mentor).
+Praxis does not own: general memory (use memory tool), preference persistence (Taste), pattern discovery (Finch), communications (Dispatch), skill evaluation (Mentor).
 
 Praxis reads journals from all skills to extract behavioral signals. Praxis decides whether to act on each signal found in any skill's journal output.
 
@@ -108,7 +108,7 @@ Default cap: 12 active shifts. When at cap and a new shift is proposed: merge ov
 2. **Text similarity** — If two shifts have nearly identical `shift_text`, consolidate into a single cross-skill shift.
 3. **Only after merge** — check if cap is exceeded. If still at cap, expire the oldest/lowest-reinforced-count shift.
 
-**Shift decay:** Active shifts not reinforced in 14+ days auto-expire. Reinforcement extends half-life.
+**Shift decay:** Active shifts not reinforced in 14+ days auto-expire. Reinforcement extends half-life. Debriefs should flag shifts at 10+ days without reinforcement as "approaching decay" — on 2026-06-14, all 11 active shifts were 12-13 days old with 0 reinforcements, one day from mass expiry, but the debrief reported no action needed.
 
 **Elaborative interrogation:** Lessons must capture WHAT happened, WHY, and WHEN. Format: `[LESSON] What: <pattern>. Why: <cause>. When: <conditions>`
 
@@ -126,7 +126,7 @@ Key storage paths:
 
 **All skills → Praxis (cooperative read):** Praxis scans journal output from every skill. Consumed `journal_id` values tracked in `journals_evaluated.jsonl`.
 
-Known journal-producing skills: ocas-corvus, ocas-spot, ocas-rally, ocas-taste, ocas-elephas, ocas-finch, ocas-fellow, ocas-scout, ocas-bones, ocas-bower, ocas-vibes, ocas-voyage, ocas-imagine, ocas-weave, ocas-vesper, ocas-dispatch, ocas-mentor, ocas-lucid, ocas-sands, ocas-sift, ocas-reach, ocas-look, ocas-multipass, ocas-forge, ocas-haiku, ocas-custodian.
+Known journal-producing skills: ocas-spot, ocas-rally, ocas-taste, ocas-finch, ocas-fellow, ocas-scout, ocas-bones, ocas-bower, ocas-vibes, ocas-voyage, ocas-imagine, ocas-weave, ocas-vesper, ocas-dispatch, ocas-mentor, ocas-lucid, ocas-sands, ocas-sift, ocas-reach, ocas-look, ocas-multipass, ocas-forge, ocas-haiku, ocas-custodian.
 
 See `references/journal_ingestion.md` for journal schema and ingestion rules.
 
@@ -167,7 +167,16 @@ Action Journal — every event recording, lesson extraction, shift change, and d
 
 - All OCAS skills — Praxis reads journal output (cooperative read)
 - Dispatch — receives action decisions for communication execution
-- Elephas — journal entity observations consumed during Chronicle Ingestion
+
+## Data Directory Path
+
+**The Praxis data directory is profile-specific.** The correct path is:
+```
+/root/.hermes/profiles/<profile>/commons/data/ocas-praxis/
+```
+NOT `/root/.hermes/commons/data/ocas-praxis/` (the default profile path).
+
+The `scripts/praxis_review.py` review script hardcodes the wrong path. Any ad-hoc scripts must use profile-aware resolution or the indigo-specific path. Always verify `events.jsonl` exists at the target path before running.
 
 ## Gotchas — Critical
 
@@ -179,13 +188,17 @@ Key gotchas:
 - **Lesson content dedup required** — The `lesson_id` includes a random/timestamp component, so dedup by `lesson_id` alone does NOT prevent semantic duplicates. Each ingest run generates different IDs for the same `(signal_type, phase)` group. **Always dedup by `(signal_type, failure_phase)` content fingerprint before writing lessons.** See `ingest-script-pattern.md` §Lesson Content Dedup. Without this, `lessons.jsonl` grows by ~9-49 duplicate entries per run.
 - **Active shift cap is hard** — 12-shift cap enforced on every activation
 - **Lessons require causal grounding** — "do X because Y" not just "do X"
-- **Execute the fix, don't just summarize** — Actually update Y when you detect failure in X
+- **Forge `result` field has multiple no-op variants** — Forge scan journals use `result: "no_op"`, `result: "clean"`, and longer strings like `"clean — no pending VariantProposal or VariantDecision files"` to indicate routine success (nothing to process). All are healthy system states. **Fix:** Define `FORGE_NO_OP_RESULTS = {"no_op", "clean"}` and check `result.lower().strip() in FORGE_NO_OP_RESULTS`. Do NOT rely on exact string matching against `"no_op"` alone. The status-less forge schema variant (no `result` key, no `status` key, or empty summary string) is also a no_signal — treat as routine no-op when no other failure indicators are present.
 - **Initialize ALL accumulator variables before any loop or conditional** — `truly_new`, `remaining_proposals`, and any accumulator must be initialized before the `if`/`for` block that might define it. A variable assigned only inside a `for/else` body does not exist when the loop iterates 0 times, causing `NameError` after data writes have already completed.
+- **Spot observation no-op handler must gate ALL signal paths** — When a spot journal has `type: "observation"` and the summary contains known transient platform phrases ("skipped", "permanently broken", "dead watch", "expired", "no new availability"), the handler must emit `no_signal` and skip signal extraction entirely. Use a `skip_signals = False` flag set BEFORE the signal extraction block, check it with `if skip_signals: continue` AFTER extraction, rather than relying on `continue` inside nested conditionals that may not execute. The `summary` variable must be initialized before the spot handler runs.
 - **`execute_code` is blocked in cron context** — Use `terminal()` to run Python scripts. Do NOT use heredoc (`<< 'PYEOF'`) — shell metacharacters inside Python code (e.g., `&` in comparisons, backticks, `$()`) cause the shell to interpret them and the command fails with "Foreground command uses '&' backgrounding." The reliable pattern: **write the script to a `.py` file via `write_file()`, then execute it via `terminal(command="python3 /path/to/script.py")`. This works in both interactive and cron contexts.
 - **`write_file` OVERWRITES JSONL files** — Read-then-rewrite pattern required for appends
 - **Disk-full blocks ingest** — Check `df -h /` before running; abort if <1G free. Recovery: `apt-get clean`, remove stale scripts. See `references/gotchas-praxis.md` Disk and Environment section.
 - **Cross-skill contamination risk** — Verify Praxis content doesn't pick up artifacts from Finch
 - **Lesson suppression false-positive** — When checking if an existing lesson covers a new pattern, keyword matching against `lesson_text` is NOT sufficient. An `ocas-sands` lesson about "Google OAuth token missing" (planning phase) will incorrectly suppress a new `ocas-custodian` lesson about "Google OAuth revoked" (execution phase) because both contain "token". Match on `domain` + `failure_phase` + semantic scope, not keywords. Default to extracting the lesson when in doubt — dedup belongs in shift activation (merge-before-cap), not in lesson suppression.
+- **Malformed lesson cleanup** — Legacy ingest runs may create lesson entries with empty `signal_type` (e.g., `les-00000228995663230219-0001`). These stubs pass the `confidence: high` check and get proposed as shifts with `signal_type: "unknown"` and `domain: "unknown"`, polluting the active shift list. **Fix:** Before proposing shifts, validate that each lesson has a non-empty `signal_type` and `failure_phase`. Filter out any lesson where `signal_type` is empty, `"unknown"`, `"?"`, or `None`. If malformed lessons already exist in `lessons.jsonl`, remove them and any shifts that reference them. See `references/session_20260614_ingest.md` for the cleanup procedure.
+- **Shift proposal must validate lesson quality** — The shift proposal loop iterates over `all_lessons` and checks `confidence == 'high'` and `lid not in covered_lesson_ids`. But if lessons have empty `signal_type`, they produce shifts with `signal_type: "unknown"` that are semantically meaningless. **Always validate `signal_type` is non-empty and meaningful before proposing a shift.** Add a guard: `if not lesson.get("signal_type") or lesson["signal_type"] in ("unknown", "?", ""): skip`.
+- **Evaluated journal dedup must use canonical IDs** — When building the `seen_ids` set from `journals_evaluated.jsonl`, normalize each `journal_id` to include the `.json` extension. Without this, `skill/2026-06-13/filename` (no extension) won't match `skill/2026-06-13/filename.json` (with extension), causing journals to be re-evaluated every cycle and inflating the unevaluated set with already-processed files.
 
 ## OKRs
 
@@ -213,6 +226,7 @@ See `references/self-update-praxis.md`.
 | `references/gotcha_oauth_corruption.md` | When detecting auth-related events |
 | `references/gotcha_evidence_field_schema.md` | When reading events.jsonl for pattern detection |
 | `references/lesson_rules.md` | Before lesson extraction; confidence thresholds |
-| `references/session-notes.md` | Historical production session findings (15 sessions) |
+| `references/session_20260613_ingest_cron11.md` | 2026-06-13 ingest run: spot type case sensitivity, all_skipped_observation filter |
+| `references/session-notes.md` | Historical production session findings (25+ sessions) |
 | `references/storage-layout-praxis.md` | During initialization or path resolution |
 | `references/self-update-praxis.md` | Before running praxis.update |
