@@ -109,7 +109,7 @@ For each unevaluated journal, check in this order:
 10. **Finch `signals.cron.new_errors[]`** — for each new error, extract the job name, error message, and severity. Each entry is a separate `cron_errors` signal. Also check `signals.cron.error_breakdown` for non-zero counts (`http_401`, `http_429`, `script_path_blocked`, `stale_401`). Also check `signals.*.notes` for escalation keywords.
 10b. **Finch `tasks_added[]`** — check each task string for error/failure keywords. Tasks containing "error" or model names that failed are `failure_keyword` signals. Also check `tasks_resolved[]` for positive signals.
 11. For list-format journals: check `isinstance(data, list)` first
-12. For dict-format summaries: use `json.dumps(d)` for keyword scanning
+12. For dict-format summaries: use `json.dumps(d)` for keyword scanning. **EXCEPTION: For finch scan journals (`ocas-finch` skill), do NOT use `json.dumps()` keyword scanning on dict summaries.** Finch scan summaries contain filenames (`drive.notable[]`), email subjects, and reference data that can include failure keywords (e.g., "exception" in a filename) without any actual system failure. Rely only on structured signal paths (`signals.*`, `findings[]`, `tasks_added[]`) for finch journals. See `gotchas-praxis.md` §Finch scan summary dict `json.dumps()` false positives.
 
 **Guard every field access.** Check `isinstance(summary, str)` before `.lower()`. Check `if summary and len(summary.strip()) > 0` before keyword matching.
 
@@ -159,6 +159,10 @@ def should_suppress_summary_signals(summary_str, signals):
 
 **Use `should_suppress_summary_signals` (not `should_suppress_failure_keyword`) in all new ingest scripts.** It covers both `failure_keyword` and `auth_failure` from summary strings. In the 2026-06-07 ingest, the finch scan journal `scan-2210.json` produced a false-positive `auth_failure` event because the old filter didn't cover it.
 
+**Dispatch `auth_failure` false positive from dict summaries (MANDATORY):** ocas-dispatch journals store `summary` as a dict with fields like `gmail_auth_status: "unknown"`, `total_messages_scanned: 0`, etc. When this dict is converted to a string (via `json.dumps()` or `str()`), the word "auth" matches the `auth_failure` keyword filter — but `gmail_auth_status: "unknown"` is a routine scan result, not an actual auth failure. **Fix:** When the top-level `summary` is a dict AND the skill is `ocas-dispatch`, do NOT extract `auth_failure` signals from it. More broadly: for ALL skills, when `summary` is a dict, never extract `auth_failure` — the structured signal paths (`escalation_needed`, `execution_result.status`, etc.) are the only reliable auth failure indicators. In the 2026-06-14 ingest, 2 false-positive dispatch auth_failure events required manual cleanup.
+
+**Spot sweep `failure_keyword` false positive from routine no-ops (MANDATORY):** ocas-spot sweep journals (not just "observation" type — many use type "sweep" or no type field) routinely report all watches inactive, skipped, or deactivated. Summaries contain "inactive", "skipped", "deactivated", "zero active watches" — which match failure keyword filters. These are routine no-op states. **Fix:** After extracting `failure_keyword` signals from spot journals, apply a secondary check: if the summary contains phrases like "all watches inactive", "zero active watches", "all skipped", "all deactivated", clear the `failure_keyword` signals as routine no-op. The existing spot observation handler only catches type "Observation" (capital O) — it misses type "sweep" and typeless spot journals entirely. In the 2026-06-14 ingest, 6 false-positive spot failure_keyword events required manual cleanup.
+
 **Schema-ambiguous journal noise filter (MANDATORY):** Some journals (e.g., ocas-elephas) use non-standard schemas without a top-level `status` field. When `data.get("status", "")` returns `""`, the noise filter `if status in ("ok", "success", "complete", "completed") and not signals` does NOT match, and the journal falls through without an eval_update. This causes two problems: (1) the journal is not marked as evaluated and will be re-scanned next cycle, and (2) if eval_updates are written in a batch append, the journal may inherit a wrong `action_taken` from a previous journal. **Fix:** After the signal extraction loop, if `signals` is empty AND no eval_update was appended for this journal, append a `no_signal` eval_update explicitly. Also handle the case where `status` is absent/empty by treating it as a non-failure when no other signals are present:
 
 ```python
@@ -175,9 +179,172 @@ if not signals:
     continue
 ```
 
-This replaces the earlier pattern of checking `status in ("ok", ...)` as the sole no-signon filter.
+This replaces the earlier pattern of checking `status in ("ok", ...)` as the sole no-signal filter.
 
-**Nested scan rule:** Never rely solely on top-level fields. Always drill into `findings[]`, `sources.*`, and `new_findings[]` arrays. The initial extraction pass in the 2026-06-04 ingest missed 5 real signals (1 escalation, 2 platform_failures, 1 auth_failure, 1 execution_error) because the script only checked top-level `escalation_needed` and didn't scan `findings[].escalation_needed` or `sources.*.error_breakdown`. A targeted re-extraction pass recovered them. Build nested scanning into the initial pass to avoid this two-phase overhead.
+**`break` vs `continue` in per-journal no-op handlers (MANDATORY):** When a journal is identified as a no-op inside the `for canonical, fpath in unevaluated:` loop (forge returning `"clean"`/`"no_op"`, spot observation with all-skipped results, etc.), the handler MUST use `continue` — NOT `break`. `break` exits the entire loop, leaving all remaining journals unprocessed and skipping lesson extraction, shift proposal, decision logging, and the Praxis journal write. In the 2026-06-14 ingest, a `break` on the 3rd forge no-op (of 7 unevaluated) silently dropped 4 journals and all downstream steps. **Rule:** After writing a `no_signal` eval_update for a no-op journal, always `continue`. The only legitimate `break` is for `FileNotFoundError`.
+
+**Nested scan rule:** Never rely solely on top-level fields.
+
+## Complete `extract_signals_from_dict` Reference Implementation
+
+Every ingest script needs this function. Copy and adapt — don't reconstruct from scratch. The function below is production-tested across 15+ runs and handles all known schema variants:
+
+```python
+FORGE_NO_OP_RESULTS = {"no_op", "clean"}
+
+def extract_signals_from_dict(data, skill):
+    """Extract behavioral signals from a journal dict. Returns (signals, summary, status)."""
+    signals = []
+    summary = ""
+    status = ""
+
+    # Top-level status
+    status = data.get("status", "")
+    if isinstance(status, dict):
+        status = status.get("status", "")
+
+    # Top-level summary
+    raw_summary = data.get("summary", "")
+    if isinstance(raw_summary, str):
+        summary = raw_summary
+    elif isinstance(raw_summary, dict):
+        # Don't keyword-scan dict summaries — high false positive risk
+        # (dispatch gmail_auth_status, finch drive.notable filenames, etc.)
+        summary = ""
+
+    # Check escalation_needed
+    if data.get("escalation_needed") is True:
+        signals.append({"type": "escalation", "phase": "planning", "evidence": {"source": "top-level"}})
+
+    # Check decision.execution_result.status
+    decision = data.get("decision", {})
+    if isinstance(decision, dict):
+        exec_result = decision.get("execution_result", {})
+        if isinstance(exec_result, dict):
+            exec_status = exec_result.get("status", "")
+            if exec_status in ("error", "partial"):
+                signals.append({"type": "execution_error", "phase": "execution",
+                                "evidence": {"exec_status": exec_status}})
+
+        # Check decision.summary for keywords (only if non-empty string)
+        dec_summary = decision.get("summary", "")
+        if isinstance(dec_summary, str) and dec_summary.strip():
+            dec_lower = dec_summary.lower()
+            if any(kw in dec_lower for kw in ["failed", "failure", "error", "timeout", "exception"]):
+                signals.append({"type": "failure_keyword", "phase": "execution",
+                                "evidence": {"summary": dec_summary[:200]}})
+            if any(kw in dec_lower for kw in ["oauth", "token", "401", "auth"]):
+                signals.append({"type": "auth_failure", "phase": "execution",
+                                "evidence": {"summary": dec_summary[:200]}})
+
+    # Check actions_taken
+    actions = data.get("actions_taken", [])
+    if isinstance(actions, list):
+        for action in actions:
+            if isinstance(action, dict):
+                outcome = action.get("outcome", "")
+                if isinstance(outcome, str) and outcome.lower() in ("error", "failure", "failed"):
+                    signals.append({"type": "execution_error", "phase": "execution",
+                                    "evidence": {"action": action.get("action", "")}})
+
+    # Check fixes_applied
+    checks = data.get("checks", {})
+    if isinstance(checks, dict) and checks.get("fixes_applied", 0) > 0:
+        signals.append({"type": "correction", "phase": "execution",
+                        "evidence": {"fixes_applied": checks["fixes_applied"]}})
+
+    # Check new_findings
+    findings = data.get("new_findings", [])
+    if isinstance(findings, list):
+        for finding in findings:
+            if isinstance(finding, dict):
+                sev = finding.get("severity", "")
+                if sev in ("error", "critical", "high"):
+                    signals.append({"type": "escalation", "phase": "execution",
+                                    "evidence": {"finding": finding.get("title", "")}})
+
+    # Check nested findings array
+    nested_findings = data.get("findings", [])
+    if isinstance(nested_findings, list):
+        for finding in nested_findings:
+            if isinstance(finding, dict):
+                f_status = finding.get("status", "")
+                if f_status in ("error", "failed"):
+                    signals.append({"type": "execution_error", "phase": "execution",
+                                    "evidence": {"finding_status": f_status}})
+                if finding.get("escalation_needed"):
+                    signals.append({"type": "escalation", "phase": "execution",
+                                    "evidence": {"finding_escalation": True}})
+
+    # Check findings dict (finch-style)
+    findings_dict = data.get("findings", {})
+    if isinstance(findings_dict, dict):
+        for src_name, src_data in findings_dict.items():
+            if isinstance(src_data, dict):
+                src_status = src_data.get("status", "")
+                if src_status in ("ERROR", "error", "FAILED", "failed"):
+                    signals.append({"type": "execution_error", "phase": "execution",
+                                    "evidence": {"source": src_name, "status": src_status}})
+
+    # Finch-specific: signals.* structure
+    finch_signals = data.get("signals", {})
+    if isinstance(finch_signals, dict):
+        cron_data = finch_signals.get("cron", {})
+        if isinstance(cron_data, dict):
+            new_errors = cron_data.get("new_errors", [])
+            if isinstance(new_errors, list) and new_errors:
+                signals.append({"type": "cron_errors", "phase": "execution",
+                                "evidence": {"count": len(new_errors)}})
+            error_breakdown = cron_data.get("error_breakdown", {})
+            if isinstance(error_breakdown, dict):
+                for err_type, count in error_breakdown.items():
+                    if isinstance(count, (int, float)) and count > 0:
+                        signals.append({"type": "cron_errors", "phase": "execution",
+                                        "evidence": {"error_type": err_type, "count": count}})
+        tasks_added = finch_signals.get("tasks_added", [])
+        if isinstance(tasks_added, list):
+            for task in tasks_added:
+                if isinstance(task, str) and any(kw in task.lower() for kw in ["error", "failed", "failure"]):
+                    signals.append({"type": "failure_keyword", "phase": "execution",
+                                    "evidence": {"task": task[:200]}})
+
+    # Check for completed_with_errors status
+    if status == "completed_with_errors":
+        signals.append({"type": "completed_with_errors", "phase": "execution",
+                        "evidence": {"status": status}})
+
+    # Forge no-op filter
+    if skill == "ocas-forge":
+        result = data.get("result", "")
+        if isinstance(result, str) and result.lower().strip() in FORGE_NO_OP_RESULTS:
+            return [], summary, status
+
+    # Spot observation/sweep no-op filter
+    if skill == "ocas-spot":
+        obs_type = data.get("type", "")
+        if isinstance(obs_type, str) and obs_type.lower() == "observation":
+            results = data.get("results", [])
+            if isinstance(results, list) and results:
+                all_skipped = all(
+                    isinstance(r, dict) and r.get("status", "").lower().startswith(("skipped", "deactivated"))
+                    for r in results
+                )
+                if all_skipped:
+                    return [], summary, status
+        # Also check sweep-type spot journals for all-inactive no-op
+        if isinstance(summary, str) and summary.strip():
+            summary_lower = summary.lower()
+            NO_OP_PHRASES = [
+                "all watches inactive", "zero active watches", "all skipped",
+                "all deactivated", "no active automatable", "all 4 watch records are inactive"
+            ]
+            if any(phrase in summary_lower for phrase in NO_OP_PHRASES) and not signals:
+                return [], summary, status
+
+    return signals, summary, status
+```
+
+**IMPORTANT:** Define this function BEFORE the `for canonical, fpath in unevaluated:` loop. Python does not hoist function definitions.
 
 ## Event Recording Rules
 
@@ -196,6 +363,8 @@ After appending events to `events.jsonl`:
 4. Rewrite `events.jsonl` with deduplicated list
 
 **Known limitation:** Dedup by `source_journal` keeps only 1 event per journal file. A single journal can contain multiple distinct signal types (e.g., escalation + correction from different findings). When both signal types are important, consider deduping by `(source_journal, signal_type)` instead of just `source_journal`. This is especially relevant for custodian escalation-runner journals that may report both new escalations and auto-resolved issues in the same run.
+
+**Same-type multi-signal collision (MANDATORY recovery):** Even with `(source_journal, signal_type)` dedup, a journal containing multiple distinct issues of the same signal type (e.g., two different `execution_error` findings from one finch scan) will still collapse to one event. The second issue is silently lost. **Recovery pattern**: After writing events, count raw signals per journal before dedup. If a journal produced N signals but only M events survive dedup (N > M), log a `multi_signal_collision` warning in the journal entry and eval_update `reason` field. Example: `"reason": "Extracted 3 signal(s), 1 lost to dedup collision (finch scan-1508: 2 execution_error → 1 event)"`. To fully recover lost signals, manually append them as separate events with distinct `event_id` values and the same `source_journal`. Discovered 2026-06-13: finch scan-1508 produced 2 `execution_error` signals (dead script + context engine) but dedup collapsed them to 1 event; the context engine signal required manual recovery.
 
 ## Lesson Extraction — Two-Pass Pattern (MANDATORY)
 
@@ -273,6 +442,32 @@ for lesson in all_lessons:
 ```
 
 **Do NOT** check only `lesson_id` — this misses shifts using `source_lesson_ids` or `source_lesson`, causing hundreds of duplicate proposals.
+
+### Malformed Lesson Guard (MANDATORY — before proposing any shift)
+
+Legacy ingest runs may create lesson entries with empty `signal_type` (e.g., `les-00000228995663230219-0001`). These stubs pass the `confidence == 'high'` check and get proposed as shifts with `signal_type: "unknown"` and `domain: "unknown"`, polluting the active shift list.
+
+**Always validate lesson quality before proposing a shift:**
+
+```python
+for lesson in all_lessons:
+    lid = get_lesson_id(lesson)
+    st = lesson.get("signal_type", "")
+    phase = lesson.get("failure_phase", "")
+
+    # GUARD: skip malformed lessons (empty/unknown signal_type or missing phase)
+    if not st or st in ("unknown", "?", ""):
+        print(f"  Skipping malformed lesson: {lid} (signal_type='{st}')")
+        continue
+    if not phase:
+        print(f"  Skipping malformed lesson: {lid} (failure_phase='{phase}')")
+        continue
+
+    if lesson.get('confidence') == 'high' and lid not in covered_lesson_ids:
+        # ... propose shift ...
+```
+
+**If malformed lessons already exist in `lessons.jsonl`:** Remove them and any shifts that reference them. See `references/session_20260614_ingest.md` for the full cleanup procedure.
 
 ## Shift Activation
 

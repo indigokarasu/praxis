@@ -50,6 +50,14 @@
 - `session_20260604_ingest2.md` — Compaction step missing from pattern (fixed), os.path.exists() guard added, typo fixes. 8 journals scanned, 1 escalation signal. Cap at 12/12.
 - `session_20260604_ingest3.md` — **Schema-ambiguous journal noise filter gap**: elephas journal with no top-level `status` field fell through noise filter, got incorrectly marked "event_recorded". Fixed with explicit `no_signal` fallback after signal loop. Also documented post-write dedup limitation (drops multiple signals from same journal). 2 journals scanned, 1 escalation event, 1 new lesson (escalation_planning). Cap at 12/12.
 
-### 2026-06-07 Sessions (continued)
+### 2026-06-14 Sessions
 
-- `session_20260607_ingest2.md` — **os.path.join dot-strip bug**: ingest script used `os.path.join("/root", "hermes/commons/...")` which produced `/root/hermes/...` (missing the dot in `.hermes`). All JSONL writes silently went to the wrong path, then crashed on first `FileNotFoundError` read-back. Fixed by switching to absolute string literals. Script was re-run successfully with 2 unevaluated journals (both no-signal routine scans). 0 new events, 0 new lessons, 44 proposed shifts merged into active, 123 held at cap (12/12). Also: `write_file` cleanup removed `ingest_run.py` from data directory root (matched `ingest_*.py` pattern); fixed by writing to `scripts/` subdirectory instead. Function `get_lesson_id_from_proposal()` was called before definition in shift section — moved to top of script. All three path/function-ordering pitfalls documented in ingest-script-pattern.md §File Path Pitfall. Proposed pool at 173 entries (12 active at cap). `journals_evaluated.jsonl` at 6,250 entries — compaction at >5,000 was applied but entries remain near threshold due to new additions aging in. Steady-state run: all 18 event groups already have lessons.
+- `session_20260614_ingest.md` — **`break` vs `continue` bug**: forge/spot no-op handlers used `break` instead of `continue` in the per-journal loop, causing early exit that left 4 of 7 journals unprocessed and skipped lesson extraction. Fixed both handlers to `continue`. Also added `should_suppress_summary_signals` coverage for spot sweep journals with no summary. 7 journals total (5 forge + 2 spot), all no-signal. Active shifts stable at 4/12. System steady-state — 10+ consecutive runs with 0 new events.
+
+### 2026-06-13 Sessions (continued)
+
+- `session_20260613_ingest_cron8.md` — Finch dict-summary false positive pattern (cron_health "No new error data" matched as execution_error). 6 journals scanned, 0 new events.
+- `session_20260613_ingest_cron9.md` — Forge `result: "no_op"` false positive pattern. 5 journals scanned, 0 new events.
+- `session_20260613_ingest_cron10.md` — Finch dict-style `findings` schema observation (dict vs array). 5 journals scanned, all no-signal. Steady-state confirmed (8+ consecutive runs with 0 new events). Active shifts at 4/12.
+- `session_20260613_ingest_cron11.md` — Spot type case sensitivity fix, all_skipped_observation filter.
+- `session_20260613_ingest_cron12.md` — **Legacy lesson `signal_type` missing**: shift proposal crashed with `KeyError: 'signal_type'` on 3 domain-only lessons. Fixed with `.get()` guard. 6 journals scanned (first pass), all no-signal. Steady-state confirmed. Active shifts at 4/12.
