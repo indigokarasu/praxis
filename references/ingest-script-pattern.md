@@ -18,18 +18,33 @@ with open(EVAL_FILE, 'r') as f:
         line = line.strip()
         if not line:
             continue
-        entry = json.loads(line)
-        jid = entry.get("journal_id", "")
+        # Handle mixed formats: some entries are plain strings, some are JSON dicts
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            entry = line  # plain string entry
+
+        if isinstance(entry, dict):
+            jid = entry.get("journal_id", "")
+        elif isinstance(entry, str):
+            jid = entry
+        else:
+            continue
+
         if jid not in seen_ids:
             seen_ids.add(jid)
-            eval_entries.append(entry)
+            # Normalize to dict format for consistent downstream handling
+            if isinstance(entry, str):
+                eval_entries.append({"journal_id": entry, "action_taken": "no_signal", "evaluated_at": "legacy"})
+            else:
+                eval_entries.append(entry)
 
 with open(EVAL_FILE, 'w') as f:
     for e in eval_entries:
         f.write(json.dumps(e) + "\n")
 ```
 
-Use JSON-aware parsing (Python `json.loads`), NOT `grep`/`comm` which fail on mixed formats.
+Use JSON-aware parsing (Python `json.loads`), NOT `grep`/`comm` which fail on mixed formats. **CRITICAL:** The eval file accumulates both plain strings (from shell rebuilds) and JSON dicts (from Python ingest scripts). Always check `isinstance(entry, dict)` before calling `.get()`.
 
 ### 1b. Compact if >5,000 entries
 
@@ -58,8 +73,8 @@ if len(eval_entries) > 5000:
 ```python
 import os
 
-JOURNALS_DIR = "/root/.hermes/commons/journals"
-SKIP_DIRS = {"ocas-praxis", "ocas-lucid"}
+JOURNALS_DIR = "/root/.hermes/profiles/indigo/commons/journals"
+SKIP_DIRS = {"ocas-praxis"}
 
 all_files = []
 for root_dir, dirs, files in os.walk(JOURNALS_DIR):
@@ -73,11 +88,51 @@ for root_dir, dirs, files in os.walk(JOURNALS_DIR):
             rel_path = os.path.relpath(full_path, JOURNALS_DIR)
             path_parts = rel_path.split('/')
             if len(path_parts) >= 2:
-                date_dir = path_parts[1] if len(path_parts) > 1 else ""
-                if date_dir in (today, yesterday):
-                    skill = path_parts[0]
-                    canonical = f"{skill}/{date_dir}/{fname}"
-                    all_files.append((canonical, full_path))
+                skill = path_parts[0]
+                canonical = f"{skill}/{date_dir}/{fname}"
+                all_files.append((canonical, full_path))
+```
+
+**CRITICAL: Eval IDs include `.json` extension.** The `journals_evaluated.jsonl` file stores journal IDs with the `.json` extension (e.g., `ocas-bones/2026-06-15/scan-20260615-1430.json`). Your `path_to_rel_id` function MUST preserve the extension. Stripping it causes ALL journals to appear unevaluated (4,661 instead of 86). Correct pattern:
+
+```python
+def path_to_rel_id(jf_path):
+    """Convert absolute path to canonical journal_id. MUST keep .json extension."""
+    parts = jf_path.parts
+    try:
+        idx = parts.index("journals")
+    except ValueError:
+        return None
+    # Reconstruct relative path from journals/ root, KEEPING .json extension
+    rel = "/".join(parts[idx+1:])
+    return rel  # e.g., "ocas-bones/2026-06-15/scan-20260615-1430.json"
+```
+
+### 2b. Batch limit when unevaluated set is large
+
+When the unevaluated set exceeds 500 journals, cap the batch to avoid timeout. Prioritize OCAS skill journals (which contain behavioral signals) over non-OCAS journals (mostly routine run logs):
+
+```python
+OCAS_SKILLS = {
+    "ocas-mentor", "ocas-custodian", "ocas-forge", "ocas-spot",
+    "ocas-finch", "ocas-sands", "ocas-rally", "ocas-taste",
+    "ocas-dispatch", "ocas-elephas", "ocas-expansion", "ocas-bones",
+    "ocas-bower", "ocas-fellow", "ocas-genie", "ocas-haiku",
+    "ocas-imagine", "ocas-inception", "ocas-look", "ocas-lucid",
+    "ocas-multipass", "ocas-reach", "ocas-sift", "ocas-vibes",
+    "ocas-voyage", "ocas-weave", "ocas-vesper", "ocas-styx",
+    "ocas-corvus", "ocas-actualization", "ocas-autobio",
+}
+
+MAX_BATCH = 500
+ocas_uneval = [(jid, jf) for jid, jf in all_unevaluated if jid.split("/")[0] in OCAS_SKILLS]
+other_uneval = [(jid, jf) for jid, jf in all_unevaluated if jid.split("/")[0] not in OCAS_SKILLS]
+
+if len(ocas_uneval) + len(other_uneval) > MAX_BATCH:
+    remaining = max(0, MAX_BATCH - len(ocas_uneval))
+    to_process = ocas_uneval + other_uneval[:remaining]
+else:
+    to_process = all_unevaluated
 ```
 
 ### 3. Compute unevaluated set (set difference) + existence filter
@@ -122,7 +177,9 @@ SUPPRESS_PHRASES = [
     "transient", "self-resolving", "no action needed", "no intervention",
     "stable at", "all errors transient", "consecutive_failures=0",
     "stale counter", "stale failure", "known pattern", "already tracked",
-    "operational", "healthy"
+    "operational", "healthy",
+    "escalations verified resolved", "escalations resolved",
+    "no new urgent issues"
 ]
 
 def should_suppress_failure_keyword(summary_str, signals):
@@ -184,6 +241,32 @@ This replaces the earlier pattern of checking `status in ("ok", ...)` as the sol
 **`break` vs `continue` in per-journal no-op handlers (MANDATORY):** When a journal is identified as a no-op inside the `for canonical, fpath in unevaluated:` loop (forge returning `"clean"`/`"no_op"`, spot observation with all-skipped results, etc.), the handler MUST use `continue` — NOT `break`. `break` exits the entire loop, leaving all remaining journals unprocessed and skipping lesson extraction, shift proposal, decision logging, and the Praxis journal write. In the 2026-06-14 ingest, a `break` on the 3rd forge no-op (of 7 unevaluated) silently dropped 4 journals and all downstream steps. **Rule:** After writing a `no_signal` eval_update for a no-op journal, always `continue`. The only legitimate `break` is for `FileNotFoundError`.
 
 **Nested scan rule:** Never rely solely on top-level fields.
+
+### Mentor Journal Schema Variation: `evaluation_coverage` vs `coverage` (MANDATORY)
+Mentor-light heartbeat journals use two schema variants:
+- **Variant A** (older): `metrics.coverage` (float, 0.0–1.0) — the skill's behavioral coverage
+- **Variant B** (newer): `metrics.evaluation_coverage` (float, 0.0–1.0) — Praxis's journal evaluation coverage
+
+When extracting `low_coverage` signals from mentor journals, check `metrics.get("coverage")` ONLY.
+Do NOT fall back to `evaluation_coverage` — it measures Praxis scan progress, not behavioral coverage.
+If `coverage` key is absent, default to 1.0 (no low_coverage signal).
+
+```python
+# CORRECT — only check behavioral coverage
+coverage = metrics.get("coverage", 1.0)  # absent → 1.0 → no signal
+
+# WRONG — conflates evaluation coverage with behavioral coverage
+coverage = metrics.get("coverage", metrics.get("evaluation_coverage", 1.0))
+```
+
+### Phase Case Normalization (MANDATORY)
+Always normalize `failure_phase` to lowercase before grouping, dedup, and comparison:
+```python
+normalize_phase = lambda p: str(p).strip().lower()
+```
+Use `normalize_phase(phase)` in ALL lesson grouping keys, lesson dedup checks, and shift overlap comparisons.
+Without this, `"Planning"` and `"planning"` are treated as separate groups, causing duplicate lessons
+and preventing events from merging with existing lesson groups.
 
 ## Complete `extract_signals_from_dict` Reference Implementation
 
@@ -307,16 +390,35 @@ def extract_signals_from_dict(data, skill):
                 if isinstance(task, str) and any(kw in task.lower() for kw in ["error", "failed", "failure"]):
                     signals.append({"type": "failure_keyword", "phase": "execution",
                                     "evidence": {"task": task[:200]}})
+        # Finch new_tasks_added is a list of dicts, not an int
+        new_tasks_added = data.get("new_tasks_added", [])
+        if isinstance(new_tasks_added, list) and len(new_tasks_added) > 0:
+            signals.append({"type": "new_tasks_found", "phase": "execution",
+                            "evidence": {"count": len(new_tasks_added)}})
 
     # Check for completed_with_errors status
     if status == "completed_with_errors":
         signals.append({"type": "completed_with_errors", "phase": "execution",
                         "evidence": {"status": status}})
 
-    # Forge no-op filter
+    # Forge no-op filter — MUST come after signal extraction but BEFORE event recording.
+    # Note: Do NOT check `files_processed` for forge activity detection — the field is a
+    # list, not an int, and comparing it to 0 raises TypeError. The `result` field alone
+    # is sufficient to distinguish no-op from activity.
+    # Also checks `status` field: newer forge journals use `status: "complete"` (not `result`).
+    # Also checks `action.result`: newest forge schema nests result under `action` key.
     if skill == "ocas-forge":
         result = data.get("result", "")
+        forge_status = data.get("status", "")
+        # Check nested action.result (new schema variant)
+        action = data.get("action", {})
+        if isinstance(action, dict):
+            action_result = action.get("result", "")
+            if isinstance(action_result, str) and action_result.lower().strip() in FORGE_NO_OP_RESULTS:
+                return [], summary, status
         if isinstance(result, str) and result.lower().strip() in FORGE_NO_OP_RESULTS:
+            return [], summary, status
+        if isinstance(forge_status, str) and forge_status.lower().strip() in ("complete", "completed", "no_new_files", "clean"):
             return [], summary, status
 
     # Spot observation/sweep no-op filter
@@ -354,6 +456,99 @@ def extract_signals_from_dict(data, skill):
 - Use canonical signal_type values: `auth_failure`, `escalation`, `execution_error`, `correction`, etc.
 - Legacy schema events with `signal_type` in `("unknown", "?", None, "")` are noise — skip them
 
+## Lesson Merge/Proposal — Schema Variance Gotchas (MANDATORY)
+
+### Lesson `lesson_text` vs `summary` field variance
+`lessons.jsonl` contains mixed schemas: production lessons use `lesson_text`, but legacy lessons use `summary` (and some use neither). When reading lessons for shift merge/proposal, use:
+```python
+text = l.get("lesson_text", "") or l.get("summary", "")
+```
+A `KeyError` on `lesson_text` crashes the shift merge loop and blocks all downstream processing. Discovered 2026-06-16: 2 lessons in `lessons.jsonl` used `summary` instead of `lesson_text`.
+
+### Lesson Noise Gate (MANDATORY before writing any lesson)
+
+Signal types that are routine system noise MUST NOT become lessons. Filter at lesson creation time, not at shift proposal time:
+
+```python
+NOISE_SIGNAL_TYPES = {"", "unknown", "?", "no_op", "forge_activity", "routine", "no_signal", "cron_error", "cron_errors", "observation"}
+```
+NOISE_SIGNAL_TYPES = {"", "unknown", "?", "no_op", "forge_activity", "routine", "no_signal", "cron_error", "cron_errors", "observation", "success",
+    # Specific noise signal types observed in practice (2026-06-17 through 2026-06-18)
+    "forge_no_unprocessed_files", "forge_no-op", "cron_healthy",
+    "journal_entry", "mentor_light", "warning",
+    "skipped", "coverage_gap", "no_action_needed",
+    "observation",  # spot observation records are routine, not behavioral patterns (added 2026-06-18)
+}
+# After Pass 2 lesson extraction, before writing lessons to lessons.jsonl:
+# MANDATORY: Filter out events with null/None/empty failure_phase BEFORE grouping
+for lesson in new_lessons:
+    if lesson.get("signal_type", "") in NOISE_SIGNAL_TYPES:
+        print(f"  Skipping noise lesson: signal_type={lesson.get('signal_type')}")
+        continue
+    # ... write lesson ...
+```
+
+This prevents polluting the lesson pool with patterns like "routine no-op scans across 17 events" that produce non-actionable shifts.
+`no_op` and `forge_activity` signal types can be extracted as valid lessons when forge no-op filtering misses edge cases. These are always routine and should be filtered at the lesson quality check:
+```python
+NOISE_SIGNAL_TYPES = {"", "unknown", "?", "no_op", "forge_activity", "routine", "no_signal", "cron_error", "cron_errors", "observation"}
+if lesson.get("signal_type", "") in NOISE_SIGNAL_TYPES:
+    continue  # Skip — routine system noise, not a behavioral pattern
+```
+In the 2026-06-16 ingest, 2 such lessons were extracted and had to be removed in post-hoc cleanup.
+
+**2026-06-16 v2 ingest update:** `cron_error` and `cron_errors` added to NOISE_SIGNAL_TYPES. These are routine cron infrastructure signals (timeouts, rate limits, module import failures) — not behavioral patterns. The v2 ingest script did not apply this filter and produced 3 low-quality lessons (cron_error, forge_activity, no_op). All 3 should have been suppressed. The cleanup pattern below was used to remove them.
+
+### Post-ingest lesson cleanup pattern
+After every ingest run, run a cleanup pass that removes:
+- Lessons with `signal_type` in `NOISE_SIGNAL_TYPES` (empty, unknown, no_op, forge_activity)
+- Lessons with `confidence` != `high` (low-confidence stubs)
+- Lessons where `lesson_text` and `summary` are both empty/malformed
+- Any shifts that reference removed lessons (orphaned shift references)
+
+```python
+NOISE_SIGNAL_TYPES = {"", "unknown", "?", "no_op", "forge_activity"}
+
+def cleanup_lessons_and_shifts(lessons_file, shifts_file):
+    # Load and filter lessons
+    kept_lessons = []
+    removed_ids = set()
+    with open(lessons_file, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line: continue
+            l = json.loads(line)
+            sig = l.get("signal_type", "")
+            text = l.get("lesson_text", "") or l.get("summary", "")
+            if sig in NOISE_SIGNAL_TYPES or not text or len(text.strip()) < 10:
+                removed_ids.add(l.get("lesson_id", l.get("id", "")))
+                continue
+            kept_lessons.append(l)
+    
+    # Rewrite lessons
+    with open(lessons_file, "w") as f:
+        for l in kept_lessons:
+            f.write(json.dumps(l) + "\n")
+    
+    # Remove orphaned shifts (shifts referencing removed lesson IDs)
+    kept_shifts = []
+    with open(shifts_file, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line: continue
+            s = json.loads(line)
+            source_lessons = s.get("source_lessons", [])
+            if any(lid in removed_ids for lid in source_lessons):
+                continue  # Remove shift referencing bad lesson
+            kept_shifts.append(s)
+    
+    with open(shifts_file, "w") as f:
+        for s in kept_shifts:
+            f.write(json.dumps(s) + "\n")
+    
+    return len(kept_lessons), len(removed_ids)
+```
+
 ## Post-Write Dedup (MANDATORY)
 
 After appending events to `events.jsonl`:
@@ -370,10 +565,11 @@ After appending events to `events.jsonl`:
 
 ### Pass 1: Initial Extraction
 1. Re-read `events.jsonl` from disk (newly written events must be visible)
-2. Filter to meaningful events (skip unknown/?/None signal_types)
-3. Group by `(signal_type, failure_phase)`
+2. Filter to meaningful events (skip unknown/?/None signal_types, and any signal_type in `NOISE_SIGNAL_TYPES`)
+3. Group by `(signal_type, failure_phase)` — normalize both to lowercase
 4. Extract lessons for groups with 2+ events
-5. Write lesson stubs (they will be `confidence: low`)
+5. **Noise gate before writing lesson stubs:** Check `st in NOISE_SIGNAL_TYPES` and skip. This filter MUST be applied here at grouping time, not just at event recording time. The event pool contains 2500+ events accumulated over weeks — noise types like `mentor_light` (288 events) and `coverage_gap` (11 events) will produce spurious lessons if not filtered at this step. See `session_20260618_ingest_cron_aa.md`.
+6. Write lesson stubs (they will be `confidence: low`)
 
 ### Pass 2: Causal Grounding Upgrade
 1. For each low-confidence lesson, add full what/why/when grounding
@@ -394,20 +590,28 @@ After appending events to `events.jsonl`:
 
 ```python
 # Build set of (signal_type, failure_phase) tuples already covered by existing lessons
+# Normalize to lowercase to prevent case-variance duplicates
 existing_groups = set()
 for l in existing_lessons:
-    key = (l.get("signal_type", ""), l.get("failure_phase", ""))
-    if key[0] and key[1]:
-        existing_groups.add(key)
+    st = (l.get("signal_type", "") or "").strip().lower()
+    fp = (l.get("failure_phase", "") or "").strip().lower()
+    if st and fp and fp not in ("none", "null", ""):
+        existing_groups.add((st, fp))
 
 # Only write lessons for groups not already covered
 filtered_new_lessons = []
 for lesson in new_lessons:
-    key = (lesson.get("signal_type", ""), lesson.get("failure_phase", ""))
-    if key in existing_groups:
-        print(f"  Skipping duplicate lesson: signal_type={key[0]}, phase={key[1]}")
+    st = (lesson.get("signal_type", "") or "").strip().lower()
+    fp = (lesson.get("failure_phase", "") or "").strip().lower()
+    if not st or not fp or fp in ("none", "null", ""):
+        print(f"  Skipping lesson with invalid phase: signal_type={st}, phase={fp}")
         continue
-    existing_groups.add(key)
+    if (st, fp) in existing_groups:
+        print(f"  Skipping duplicate lesson: signal_type={st}, phase={fp}")
+        continue
+    existing_groups.add((st, fp))
+    # Normalize phase to lowercase before writing
+    lesson["failure_phase"] = fp
     filtered_new_lessons.append(lesson)
 
 new_lessons = filtered_new_lessons
@@ -415,7 +619,7 @@ new_lessons = filtered_new_lessons
 
 **Always apply content dedup BEFORE writing to `lessons.jsonl`.** The `lesson_id`-based dedup catches exact ID matches but NOT semantic duplicates with different IDs. Without this filter, `lessons.jsonl` grows by ~9-49 entries per ingest run with no new information.
 
-**Verified production result**: On 2026-06-06, without content dedup, one ingest run produced 49 "today" lessons covering the same 16 `(signal_type, phase)` groups that already had lessons from prior runs. After adding content dedup, subsequent runs produce 0 duplicate lessons.
+**Phase validation is mandatory.** Events with `failure_phase` of `None`, `null`, `""`, or `"MISSING"` must be filtered out BEFORE the lesson grouping step. In the 2026-06-16 ingest, 90 events with invalid phases produced 26 meaningless lessons. Filter: `valid_events = [e for e in all_events if str(e.get('failure_phase', '')).lower() not in ('none', 'null', '', 'missing')]`
 
 ## Shift Proposal Dedup (MANDATORY — before proposing any new shift)
 
@@ -442,6 +646,46 @@ for lesson in all_lessons:
 ```
 
 **Do NOT** check only `lesson_id` — this misses shifts using `source_lesson_ids` or `source_lesson`, causing hundreds of duplicate proposals.
+
+### Cap Enforcement via Priority Selection (MANDATORY — 2026-06-17)
+
+When selecting which shifts to activate under the 12-shift cap, do NOT simply activate in proposal order and expire the oldest. Instead, build a candidate pool of ALL shifts (existing active + proposed), rank by priority tuple `(reinforcement_count, source_event_count, is_cross_skill, last_reinforced)`, and select the top 12. Expire the rest.
+
+```python
+def shift_priority(shift):
+    """Calculate priority for shift selection. Higher = better. Tuple for multi-key sort."""
+    reinf = shift.get('reinforcement_count', 0)
+    event_count = shift.get('source_event_count', 0)
+    is_cross_skill = 1 if shift.get('skill') == 'cross-skill' else 0
+    last_reinf = shift.get('last_reinforced', '')
+    return (reinf, event_count, is_cross_skill, last_reinf)
+
+# Build candidate pool: existing active (some reinforced) + proposed
+all_candidates = []
+for s in active_shifts:
+    if s.get('status') == 'active':
+        s['_source'] = 'existing'
+        all_candidates.append(s)
+for s in proposed_shifts:
+    s['_source'] = 'proposed'
+    all_candidates.append(s)
+
+# Sort by priority (highest first)
+all_candidates.sort(key=shift_priority, reverse=True)
+
+# Select top MAX_ACTIVE_SHIFTS
+selected = all_candidates[:MAX_ACTIVE_SHIFTS]
+rejected = all_candidates[MAX_ACTIVE_SHIFTS:]
+
+# Update statuses
+for s in all_candidates:
+    if s in selected:
+        s['status'] = 'active'
+    else:
+        s['status'] = 'rejected' if s.get('_source') == 'proposed' else 'expired'
+```
+
+This prevents the bug where activating in proposal order with a mutable `active_shifts` list caused newly added shifts to be immediately expired to make room for later ones, losing high-value shifts (e.g., execution_error with 19 reinforcements).
 
 ### Malformed Lesson Guard (MANDATORY — before proposing any shift)
 
@@ -473,13 +717,16 @@ for lesson in all_lessons:
 
 1. Read all shifts from `shifts.jsonl`
 2. Active shifts = `status: "active"`, Proposed = `status: "proposed"`
-3. **Merge-overlap check**: For each proposed shift, check domain+phase against all active shifts
+3. **Compute active_count ONCE before the loop** — `active_count = len([s for s in all_shifts if s.get('status') == 'active'])`. Do NOT use `len(active_shifts)` inside the activation loop if you're appending to the same list.
+4. **Merge-overlap check**: For each proposed shift, check domain+phase against all active shifts
    - Use `s.get('shift_id') or s.get('id', '?')` for shift IDs
    - Use `s.get('failure_phase') or s.get('phase', 'execution')` for phase
    - Use `s.get('domain')` — if empty, fall back to lesson's `skills_affected[0]` or source journal skill
-4. If overlap found: expire proposed shift, reinforce active one
-5. If no overlap and under cap (12): activate proposed shift
-6. If at cap: leave proposed for next cycle
+5. If overlap found: expire proposed shift, reinforce active one
+6. If no overlap and under cap (12): activate proposed shift, increment `active_count += 1`
+7. If at cap: leave proposed for next cycle
+
+**CRITICAL: Do NOT append activated shifts to the same list used for the cap check.** If you use `active_shifts.append(shift)` inside the loop and check `len(active_shifts) < CAP`, the list grows on every iteration and the cap is never enforced. Use a separate counter variable instead.
 
 ## Schema Normalization Helpers (MANDATORY)
 
@@ -520,12 +767,166 @@ def get_lesson_causal_grounding(les):
 
 Use `cg = get_lesson_causal_grounding(les)` before any `.get("why")` or `.get("what")` access.
 
+### Event Schema Normalization for Lesson Extraction (MANDATORY)
+
+Events created by different ingest runs use different field names for the same semantic content. When reading events.jsonl for lesson extraction, normalize every event before use. Known field mappings: `type` -> `signal_type`, `summary`/`description` -> `evidence`, `source_skill` -> `skill`, `journal_id` -> `source_journal`. Always dedup by `(source_journal, signal_type)`, not just source_journal. See the normalize_events block in the production-proven extract_signals pattern.
+
+## Batch Pre-Filter for Forge No-Ops (MANDATORY)
+
+Before running full signal extraction on forge journals, apply a lightweight pre-filter to batch-process routine no-ops. This avoids the overhead of full `extract_signals_from_dict()` for the ~400+ routine forge scan journals that always return empty.
+
+```python
+FORGE_NO_OP_RESULTS = {"no_op", "clean", "no-op", "no_unprocessed_files", "no unprocessed"}
+
+def is_forge_no_op(journal_data):
+    """Check if a forge journal is a routine no-op. Handles both legacy and new schemas."""
+    # Check top-level result (legacy schema)
+    result = journal_data.get("result", "")
+    # Check nested action.result (new schema variant)
+    action = journal_data.get("action", {})
+    if isinstance(action, dict):
+        action_result = action.get("result", "")
+        if isinstance(action_result, str):
+            ar = action_result.lower().strip()
+            if any(ar.startswith(prefix) for prefix in FORGE_NO_OP_RESULTS):
+                return True
+    # Check top-level result
+    if isinstance(result, str):
+        r = result.lower().strip()
+        if any(r.startswith(prefix) for prefix in FORGE_NO_OP_RESULTS):
+            return True
+    # Check status field
+    status = data.get("status", "")
+    if isinstance(status, str) and status.lower().strip() in ("complete", "completed", "no_new_files", "clean"):
+        return True
+    # Check actions_taken as string (natural language no-op description)
+    actions_taken = data.get("actions_taken", "")
+    if isinstance(actions_taken, str):
+        at_lower = actions_taken.lower().strip()
+        if any(at_lower.startswith(prefix) for prefix in FORGE_NO_OP_RESULTS):
+            return True
+    # Check actions_taken as empty list (no actions = no-op)
+    if isinstance(actions_taken, list) and len(actions_taken) == 0:
+        # Empty actions_taken with no result/status = routine no-op
+        # But only if no findings indicate actual work done
+        findings = data.get("findings", {})
+        if isinstance(findings, dict):
+            total_findings = sum(v for v in findings.values() if isinstance(v, (int, float)))
+            if total_findings == 0:
+                return True
+        elif not findings:
+            return True
+    return False
+```
+
+**Usage in ingest loop:**
+```python
+# Separate forge no-ops from meaningful journals
+forge_no_op_batch = []
+meaningful_journals = []
+
+for skill, jid, fpath, rel_path in unevaluated:
+    if skill == "ocas-forge":
+        try:
+            with open(fpath) as f:
+                content = f.read().strip()
+            if not content:
+                # Mark empty as evaluated, skip
+                continue
+            journal_data = json.loads(content)
+            if is_forge_no_op(journal_data):
+                forge_no_op_batch.append((skill, jid, fpath, rel_path))
+                continue
+        except json.JSONDecodeError:
+            # Mark malformed as evaluated, skip
+            continue
+    meaningful_journals.append((skill, jid, fpath, rel_path))
+
+# Batch-mark forge no-ops
+if forge_no_op_batch:
+    batch_evaluated = []
+    for skill, jid, fpath, rel_path in forge_no_op_batch:
+        batch_evaluated.append({
+            "journal_id": rel_path,
+            "evaluated_at": now,
+            "path": fpath,
+            "action_taken": "batch_no_op",
+            "signals_found": [],
+            "reason": "Forge journal-scan no-op (batched)"
+        })
+    append_jsonl(EVALUATED_FILE, batch_evaluated)
+
+# Process meaningful journals individually
+for skill, jid, fpath, rel_path in meaningful_journals:
+    # ... full signal extraction ...
+```
+
+**Why this matters:** Without the pre-filter, every forge journal goes through full JSON parsing + signal extraction + noise filtering. For ~400+ no-op journals, this adds ~30 seconds of unnecessary processing. The pre-filter reduces forge processing to a simple string comparison on 2 fields.
+
+**Verified production result**: On 2026-06-16, 4 forge no-ops were batch-processed in <1 second vs. ~15 seconds for individual full extraction.
+
+## Dual Journal Directory Scan (MANDATORY — 2026-06-19)
+
+Journals are stored under BOTH paths:
+- `/root/.hermes/commons/journals/` (legacy/default profile) — 2,988 files
+- `/root/.hermes/profiles/indigo/commons/journals/` (indigo profile) — 7,682 files
+
+The indigo profile path contains the active, up-to-date journals for mentor, custodian, and some other skills. The legacy path contains forge, finch, spot, and other skills.
+
+**The ingest script MUST check both directories.** Use a `find_journal()` helper:
+
+```python
+JOURNALS_DIRS = [
+    "/root/.hermes/commons/journals",
+    "/root/.hermes/profiles/indigo/commons/journals",
+]
+
+def find_journal(jid):
+    for d in JOURNALS_DIRS:
+        fp = os.path.join(d, jid)
+        if os.path.exists(fp):
+            return fp
+    return None
+```
+
+When scanning the filesystem for unevaluated journals, walk BOTH directories and use a single combined `seen` set for dedup. A journal ID like `ocas-forge/2026-06-17/scan-1234.json` may exist in either directory — never assume based on skill name alone.
+
+**Verified**: On 2026-06-19, 11 unevaluated journals were split across both paths: forge/finch/spot in legacy, custodian/mentor in indigo profile. A script using only one path would miss half the new signals.
+
+## Ingest State Update Gap (MANDATORY — 2026-06-21)
+
+**The production `praxis_ingest_run.py` script does NOT update `ingest_state.json`.** When running it standalone (e.g., from a cron job), the state file is left with stale timestamps. This causes the next run's mtime-based journal discovery to miss journals written between the last state update and the current run.
+
+**Fix:** After running `praxis_ingest_run.py`, manually update `ingest_state.json`:
+
+```python
+import json
+from datetime import datetime, timezone
+
+state_path = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis/ingest_state.json'
+with open(state_path) as f:
+    state = json.load(f)
+
+now = datetime.now(timezone.utc).isoformat()
+state['last_ingest_run'] = now
+state['last_run'] = now
+state['last_ingest_events_added'] = <events_recorded>
+state['last_ingest_journals_evaluated'] = <journals_processed>
+state['last_evaluated_count'] = state.get('last_evaluated_count', 0) + <journals_processed>
+state['note'] = '<summary>'
+
+with open(state_path, 'w') as f:
+    json.dump(state, f, indent=2)
+```
+
+The dispatch template (`dispatch_ingest_template.py`) handles this update. When running `praxis_ingest_run.py` directly (cron or manual), the caller MUST update state after the script completes.
+
 ## Key Constants
 
 - Active shift cap: 12
 - Shift TTL (decay): 14 days without reinforcement
-- Journal scan window: today + yesterday
-- Skip directories: `ocas-praxis`, `ocas-lucid`, `.archive`
+- Journal scan window: ALL date directories (not just today+yesterday)
+- Skip directories: `ocas-praxis`, `.archive`
 
 ## Critical Fix: No-Early-Exit Path
 
@@ -576,9 +977,51 @@ The append-only write pattern (`write_jsonl(SHIFTS_FILE, new_proposals, mode="a"
 
 - **Write ingest scripts to `scripts/` subdirectory, NOT the data directory root** — The agent's file cleanup matches `ingest_*.py` and similar patterns. Scripts written directly to the data directory root (`ocas-praxis/ingest_run.py`) get silently removed before execution. Always write ad-hoc ingest scripts to `ocas-praxis/scripts/ingest_run_YYYYMMDD.py`. Production scripts (`praxis_review.py`, `praxis_ingest_run.py`, `praxis_self_signaler.py`, `update.sh`) are safe there.
 
+- **Periodic stale script cleanup** — Even with the `scripts/` convention, stale `.py` files accumulate in the data dir root over time. During any ingest run, if `ls *.py | wc -l` exceeds ~10 in the data dir root, run the cleanup pattern from `gotchas-praxis.md` §Stale Script Accumulation before proceeding. This prevents disk bloat and avoids the agent's file cleanup silently removing active scripts.
+
+- **`os.path.isdir(name)` vs `os.path.isdir(path)` gotcha** — When iterating date directories, the loop variable is the directory *name* (e.g., `"2026-06-14"`), not the full path. Calling `os.path.isdir(date_dir)` checks relative to the current working directory, not the skill's journal directory. This returns False for all date dirs, causing the scan to find 0 journals. **Always construct the full path first**: `date_path = os.path.join(skill_path, date_dir)` then check `os.path.isdir(date_path)`. Discovered 2026-06-14: first ingest run found 0 journals because `os.path.isdir("2026-06-14")` was checked relative to CWD (`/root/.hermes/profiles/indigo/commons/data/ocas-praxis/`) instead of the actual journal path.
+
+- **Nested f-string anti-pattern in write_file scripts** — When writing Python scripts via `write_file`, nested f-strings with dict access using escaped quotes (`f"{[f'{s[\"signal_type\"]}:{s[\"skill\"]}' for s in signals]}"`) cause `SyntaxError: unexpected character after line continuation character`. This is a Python f-string limitation (pre-3.12): f-string expressions cannot contain backslash escapes. **Fix:** Break the expression into a separate variable before the f-string:
+  ```python
+  # WRONG — SyntaxError
+  print(f"Signals: {[f'{s[\"signal_type\"]}:{s[\"skill\"]}' for s in signals]}")
+
+  # CORRECT — separate the computation
+  sig_labels = [s["signal_type"] + ":" + s["skill"] for s in signals]
+  print(f"Signals: {sig_labels}")
+  ```
+  Alternatively, use string concatenation instead of f-strings for the outer expression: `"Signals: " + str(sig_labels)`. Always run `python3 -c "compile(open('script.py').read(), 'script.py', 'exec')"` after writing to catch syntax errors before execution. Discovered 2026-06-20: ad-hoc ingest script crashed on this pattern.
+
+- **Finch weekly journal dedup** — Finch weekly journals (`job: "finch:weekly"`) contain retrospective corrections and directives that may already be covered by existing active shifts. Before recording events from a finch weekly, check each correction's implied `(signal_type, failure_phase)` against the set of pairs already covered by active shifts. Only record events for uncovered pairs. This prevents double-counting when finch re-summarizes sessions that already produced Praxis events. In the 2026-06-14 ingest, 8 of 10 corrections were already covered; only `directive/planning` and `correction/response` produced new events.
+
 - **Define helper functions before any code that calls them** — Ingest scripts may define utility functions (e.g., `get_lesson_id_from_proposal()`) inside a section that already uses them. If the function is defined after the loop that calls it, the script crashes with `NameError` at runtime. All helper functions must be defined at the top of the script or at least before the first call site. This is the same class of bug as the variable initialization gotchas — Python does not hoist function definitions.
 
 ## Python Variable Initialization in Ingest Scripts
+
+- **Initialize `all_shifts` BEFORE the `if new_lessons:` block** — The shift proposal section loads `all_shifts` from disk, but the shift write section and final summary reference `all_shifts` and `active_count` OUTSIDE the `if new_lessons:` conditional. If `new_lessons` is empty, these variables are never defined, causing `UnboundLocalError`. **Fix:** Load `all_shifts` at the very top of the shift proposal section, before any conditional:
+  ```python
+  # --- SHIFT PROPOSAL ---
+  new_shifts = []
+  all_shifts = []
+  if os.path.exists(SHIFTS_FILE):
+      with open(SHIFTS_FILE) as f:
+          for line in f:
+              line = line.strip()
+              if line:
+                  try:
+                      all_shifts.append(json.loads(line))
+                  except json.JSONDecodeError:
+                      continue
+  # NOW safe to use all_shifts in any downstream conditional or summary
+  if new_lessons:
+      active_shifts = [s for s in all_shifts if s.get('status') == 'active']
+      active_count = len(active_shifts)
+      # ... shift proposal logic ...
+  # Final summary (outside conditional):
+  final_active_count = len([s for s in all_shifts if s.get('status') == 'active'])
+  print(f"Active shifts: {final_active_count}/{MAX_ACTIVE_SHIFTS}")
+  ```
+  This applies to ANY variable used in post-section summary/output — initialize before any conditional that might define it.
 
 - **Initialize `truly_new` before the `if new_events:` block** — Ingest scripts that define `truly_new` only inside a conditional block will raise `NameError` at decision-logging time if the condition is false. Always initialize `truly_new = []` before any conditional that might define it. Same applies to any variable used after a conditional block.
 - **Initialize ALL accumulator variables before any loop or conditional** — Any variable referenced after a loop or conditional must be initialized before it. The pattern `if 'varname' in dir()` does NOT work (returns false positives from imported names). Examples:
@@ -588,6 +1031,91 @@ The append-only write pattern (`write_jsonl(SHIFTS_FILE, new_proposals, mode="a"
   - Default: declare all accumulators at the top of the section, not inside any branch.
 - **Never use `dir()` to check variable existence** — The pattern `if 'varname' in dir()` is fragile and returns false positives (matches function names, imported modules, etc.). Use explicit initialization or `try/except NameError` if truly dynamic.
 - **Initialize `summary` before the `for entry in data_list` loop** — The `summary` variable is set inside the loop body (`summary = entry.get("summary", "")`) and referenced after the loop for noise suppression (`if isinstance(summary, str) and signals_found:`). If `data_list` is empty or contains no dict entries, `summary` is never assigned, causing `UnboundLocalError` at the suppression check. Always initialize `summary = ""` before the entry loop. Same class of bug as `truly_new`/`remaining_proposals` — any variable set inside a loop and used after it must be initialized before the loop.
+
+## Python Anti-Patterns in Ingest Scripts (MANDATORY)
+
+### Never use `dir()` to check variable existence — in ANY context
+
+The pattern `if 'varname' in dir()` is fragile and returns false positives (matches function names, imported modules, etc.). This applies both to inline Python code AND to expressions embedded in f-strings or print statements:
+
+```python
+# WRONG — dir() returns false positives from imports, function names, etc.
+print(f"Shifts: {len(final_shifts) if 'final_shifts' in dir() else len(all_shifts)}")
+
+# WRONG — same problem
+if 'final_shifts' in dir():
+    do_something(final_shifts)
+
+# CORRECT — use locals() for function-local variables
+total = len(final_shifts) if 'final_shifts' in locals() else len(all_shifts)
+
+# CORRECT — even better, initialize before the conditional so the variable always exists
+final_shifts = all_shifts  # default assignment before if/else
+if some_condition:
+    final_shifts = compute_shifts()
+# Now final_shifts is always defined, no dir()/locals() check needed
+```
+
+**Rule:** Initialize ALL variables before any conditional or loop that might define them. Prefer explicit initialization over runtime existence checks. `dir()` is essentially never the right answer.
+
+### Compaction arithmetic: `len()` on both operands
+
+When computing how many entries were removed during compaction, both operands must be integers:
+
+```python
+# WRONG — TypeError: unsupported operand type(s) for -: 'int' and 'list'
+removed = len(eval_entries) - compacted
+
+# CORRECT — len() on both sides
+removed = len(eval_entries) - len(compacted)
+```
+
+This caused a crash in the compaction pre-scan step on 2026-06-14 when `journals_evaluated.jsonl` exceeded 5,000 entries.
+
+### `else` clause indentation must match the `if`
+
+When adding an `else` branch to an `if` block, ensure the `else:` is at the **exact same indentation level** as the `if`. A stray `else:` at the wrong indent level causes `SyntaxError: invalid syntax`:
+
+```python
+# WRONG — else at wrong indent
+if len(active_shifts) >= 12:
+    print("Cap reached")
+    final_shifts = all_shifts
+else:  # ← SyntaxError if this doesn't align with the 'if' above
+    # ... shift proposal logic ...
+
+# CORRECT — else aligns with if
+if len(active_shifts) >= 12:
+    print("Cap reached")
+    final_shifts = all_shifts
+else:
+    # ... shift proposal logic ...
+```
+
+### Forge no-op result variants
+
+Forge scan journals use multiple no-op result strings. The `FORGE_NO_OP_RESULTS` set should include all known variants, AND a substring match fallback is needed for verbose variants:
+
+```python
+FORGE_NO_OP_RESULTS = {"no_op", "clean", "no files found"}
+
+# Also need substring matching for verbose variants like:
+# "clean — no unprocessed VariantProposal or VariantDecision files found"
+if skill == "ocas-forge":
+    result = data.get("result", "")
+    if isinstance(result, str):
+        rl = result.lower().strip()
+        if rl in FORGE_NO_OP_RESULTS or "no_files_found" in rl or "clean" in rl or "no unprocessed" in rl:
+            return [], summary, status
+```
+
+Without the substring fallback, a forge journal with `result: "no_files_found"` passes through signal extraction and produces spurious `failure_keyword` events.
+- **Lesson content dedup by `(signal_type, failure_phase)` fails on case/phase variance** — When building the `existing_groups` set from existing lessons, the keys are case-sensitive exact matches. New lessons may use `failure_phase: "Execution"` (capitalized) while existing lessons use `"execution"` (lowercase), or `"null"` vs `None` vs `""`. This causes the dedup to miss real duplicates, producing 21+ false-positive lessons from single-event patterns. In the 2026-06-16 ingest, this produced 21 bad lessons and 6 bad shifts that had to be manually reverted. **Fix:** Normalize both sides before comparison: `key = (signal_type.strip().lower(), str(failure_phase).strip().lower() if failure_phase else "")`. Build the existing-keys set with the same normalization. Also normalize at write time: store `failure_phase` as lowercase in new lessons.
+
+- **`sorted(event_groups.items())` crashes on None signal_type** — When grouping events by `(signal_type, failure_phase)`, some legacy events have `signal_type: None`. Python's `sorted()` cannot compare `None` with `str`, raising `TypeError`. **Fix:** Use a sort key that handles None: `sorted(event_groups.items(), key=lambda x: (x[0][0] or "", x[0][1] or ""))`. Better: ensure `get_signal_type()` never returns `None` — it should always fall back to `"unknown"`.
+
+- **Shift append logic: write ONLY new shifts, not all** — After proposing new shifts, the ingest script must append only the newly created shifts to `shifts.jsonl`, NOT iterate over the combined `existing_shifts` list (which includes all pre-existing shifts already on disk). In the 2026-06-16 ingest v6, the shift write loop iterated over `existing_shifts` and wrote all 57 entries, duplicating every pre-existing shift. **Fix:** Track new shifts in a separate `new_shifts = []` list during proposal. After the proposal loop, write only `new_shifts`: `for s in new_shifts: f.write(json.dumps(s) + "\n")`.
+
 - **Mixed event schemas in `events.jsonl`** — Legacy events may use `id` instead of `event_id`, and some may lack `source_journal`. When iterating events for lesson extraction, always use:
   - `e.get("event_id", e.get("id", "?"))` for event IDs
   - `e.get("source_journal", "")` with a guard before `.split("/")`

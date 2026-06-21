@@ -17,12 +17,12 @@ Each journal file is identified by `{skill_name}/{YYYY-MM-DD}/{run_id}.json`. Pr
 {"journal_id": "ocas-spot/2026-05-23/r_abc123.json", "evaluated_at": "2026-05-23T12:30:00Z", "action_taken": "event_recorded"}
 ```
 
-**Normalization rule:** Always normalize the `journal_id` to include the `.json` extension before writing to or looking up in `journals_evaluated.jsonl`.
+**Normalization rule:** Always normalize the `journal_id` to include the `.json` extension before writing to or looking up in `journals_evaluated.jsonl`. Both the filesystem path and the stored `journal_id` MUST have the `.json` extension for reliable set-difference comparison. In production, 5,876 evaluated entries were missing the extension on write, causing false "unevaluated" positives on every scan.
 
 **Recommended scan pattern (production-proven)**: Use a Python script that:
 1. Deduplicates `journals_evaluated.jsonl` by `journal_id` (keep first occurrence)
-2. Walks `commons/journals/*/` to build a set of all `.json` file paths for today and yesterday
-3. Normalizes both filesystem paths and eval IDs to canonical `skill/YYYY-MM-DD/filename.json` form
+2. Walks `commons/journals/*/` to build a set of ALL `.json` file paths in `YYYY-MM-DD/` subdirectories (do NOT filter by today/yesterday — cron jobs write to future-dated directories that would be missed)
+3. Normalizes both filesystem paths and eval IDs to canonical `skill/YYYY-MM-DD/filename.json` form (ensure `.json` extension on both sides)
 4. Computes the set difference to find unevaluated journals
 5. Skips files in `ocas-praxis/` and `ocas-lucid/` directories
 6. Skips hidden/archive directories: any directory starting with `.`
@@ -63,7 +63,18 @@ When `decision.summary` is absent, empty, or None, do not attempt keyword matchi
 ### 5. `context_summary` field may be empty
 Many legacy events have empty `context_summary`. Do not rely on keyword matching against this field alone. Filter by `outcome_type == "failure"` + `domain` first, then enrich with keyword scanning on non-empty summaries.
 
-## When to record an event
+## Custodian journal signal types
+
+| Signal type | Trigger | Phase | Severity |
+|-------------|---------|-------|----------|
+| `custodian_fix` | `tier_1_fixes_applied > 0` | Execution | Medium |
+| `custodian_error` | `new_errors` list is non-empty | Execution | High |
+| `stale_counters` | `cron_registry.stale_counters > 0` | Execution | Low |
+| `tier2_open` | `tier_2_open[]` has entries with `status: "open"` | Planning | Medium |
+| `escalation` | `escalation_needed: true` | Execution | High |
+| `no_signal` | `outcome == "no_action_needed"` | Execution | None |
+
+**Noise filter for custodian**: `outcome == "no_action_needed"` should always produce `no_signal` regardless of other fields. The `tier_2_open` array may contain known/recurring issues — these are not new failures but latent bugs.
 
 Record a praxis event when ANY of the following are true (AND the noise filters above do not apply):
 - The journal reports an error or partial failure

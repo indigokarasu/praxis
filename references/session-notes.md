@@ -53,6 +53,7 @@
 ### 2026-06-14 Sessions
 
 - `session_20260614_ingest.md` — **`break` vs `continue` bug**: forge/spot no-op handlers used `break` instead of `continue` in the per-journal loop, causing early exit that left 4 of 7 journals unprocessed and skipped lesson extraction. Fixed both handlers to `continue`. Also added `should_suppress_summary_signals` coverage for spot sweep journals with no summary. 7 journals total (5 forge + 2 spot), all no-signal. Active shifts stable at 4/12. System steady-state — 10+ consecutive runs with 0 new events.
+- `session_20260614_ingest_cron16.md` — **Path bug**: `os.path.isdir(date_dir)` vs `os.path.isdir(date_path)` — checking directory name string instead of full path caused first run to find 0 journals. Fixed in v2. **Finch weekly dedup**: 8 of 10 corrections already covered by active shifts; only `directive/planning` and `correction/response` were new. Correct double-counting prevention. 3 journals scanned, 2 events, 2 lessons, 0 shifts (cap 12/12). All shifts age 0d — no decay concern.
 
 ### 2026-06-13 Sessions (continued)
 
@@ -61,3 +62,21 @@
 - `session_20260613_ingest_cron10.md` — Finch dict-style `findings` schema observation (dict vs array). 5 journals scanned, all no-signal. Steady-state confirmed (8+ consecutive runs with 0 new events). Active shifts at 4/12.
 - `session_20260613_ingest_cron11.md` — Spot type case sensitivity fix, all_skipped_observation filter.
 - `session_20260613_ingest_cron12.md` — **Legacy lesson `signal_type` missing**: shift proposal crashed with `KeyError: 'signal_type'` on 3 domain-only lessons. Fixed with `.get()` guard. 6 journals scanned (first pass), all no-signal. Steady-state confirmed. Active shifts at 4/12.
+
+### 2026-06-18 Sessions
+
+- `session_20260618_ingest_cron_c.md` — Routine cron ingest: 2559 journals, 7 unevaluated (5 forge no-op + 2 praxis self-journal). 0 new events, 0 lessons, 0 shifts. Steady-state confirmed (15+ consecutive runs with 0 new signals). All gotcha filters validated. Active shifts at 9/12. Eval file at 2609 entries, growing ~7/cycle.
+
+### 2026-06-16 Sessions
+
+- `session_20260616_ingest.md` — Routine cron ingest: 524 journals on disk, 4 unevaluated (3 forge no-op + 1 finch no-signal). 0 new events, 0 lessons, 0 shifts. System steady-state at 12/12 cap with 43 proposed shifts queued. Evaluated journals at 5,941. Production ingest pattern (write_file + terminal) continues reliable. No gotchas encountered.
+
+- `session_20260616_ingest_cron_praxis.md` — **Batch pre-filter optimization**: 10 unevaluated journals (4 forge no-ops batched, 6 individual). 2 new events: `cron_errors` (first occurrence — 4 failing cron jobs: custodian:deep, dispatch:email_check, ocas-weave, bones:research) and `calendar_conflict` (already covered). Cap at 12/12, no new shifts. Key learning: lightweight `is_forge_no_op()` pre-filter before full signal extraction avoids unnecessary processing of ~400+ routine forge scans. `cron_errors` tracked at 1/3 toward lesson threshold.
+
+### 2026-06-15 Sessions
+
+- `session_20260615_ingest_cron0210.md` — Routine ingest: 5 journals scanned (custodian + forge + spot), 1 event (custodian `execution_error`: bones:paper-trade transient upstream timeout), 0 lessons, 0 shifts. System steady-state at 12/12 cap, 250 events, 36 lessons, 32 proposed shifts. All shifts age 1d. Script had SyntaxError from escaped quotes in set literal inside list comp — caught by lint, fixed via patch. Already-known gotcha pattern. `journals_evaluated.jsonl` at 5,839 entries (above 5,000 compaction threshold — monitor).
+
+### 2026-06-14 Sessions (continued)
+
+- `session_20260614_ingest_1832.md` — **Ingest script arithmetic + syntax bugs**: (1) Compaction `removed = len(eval_entries) - compacted` (int-list=TypeError) → fix `len(eval_entries) - len(compacted)`. (2) `'final_shifts' in dir()` in f-string returns false positives → use `locals()` or pre-initialize. (3) Stray `else:` at wrong indent → SyntaxError. (4) Forge no-op `result: "no_files_found"` not in FORGE_NO_OP_RESULTS → added substring fallback. 5 journals scanned (4 forge + 1 spot), all no-signal. Cleaned 9 stale scripts. Added "Python Anti-Patterns" section to `ingest-script-pattern.md`. State: 247 events, 28 lessons, 12 active / 20 proposed shifts, all 0d old.
