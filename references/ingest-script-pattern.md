@@ -961,6 +961,10 @@ The append-only write pattern (`write_jsonl(SHIFTS_FILE, new_proposals, mode="a"
 
 ## File Path Pitfall
 
+- **EVAL FILE PATH: `data/ocas-praxis/` NOT `data/praxis/`** — There are two `journals_evaluated.jsonl` files. The correct one (38,000+ entries) is at `/root/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl`. The stale duplicate at `data/praxis/journals_evaluated.jsonl` has only 25 legacy entries. Always use the `data/ocas-praxis/` path. Confirmed 2026-06-25 dispatch #110.
+
+- **EVAL FILE SCHEMA: `journal_id` not `journal_file`** — The eval file uses mixed schemas. Modern entries use `{"journal_id": "ocas-forge/2026-06-25/forge-scan-TS.json", ...}`. Legacy entries from dispatch use `{"journal_file": "...", "ingested_at": "...", ...}`. When checking if a journal is already evaluated, check BOTH `journal_id` and `journal_file` fields. When writing new entries, use `journal_id`.
+
 - **Verify JSONL filenames exactly** — A single character typo (e.g., `events.jsons` instead of `events.jsonl`) produces a silent 0-result from file reads. This caused one ingest run to report 0 total events and 0 lesson groups, leading to a "no lessons needed" conclusion that was incorrect. After loading any JSONL file, assert `len(records) > 0` if the file is known to have content, and double-check the filename.
 
 - **`os.path.join` strips leading dot from path components** — `os.path.join("/root", "hermes/commons/data")` returns `/root/hermes/commons/data`, NOT `/root/.hermes/commons/data`. The `.` is treated as a relative path prefix and normalized away. When the agent home is `/root/.hermes/...`, always use **absolute string literals** for path constants, never `os.path.join` with a separate root variable:
@@ -1032,6 +1036,43 @@ The append-only write pattern (`write_jsonl(SHIFTS_FILE, new_proposals, mode="a"
 - **Never use `dir()` to check variable existence** — The pattern `if 'varname' in dir()` is fragile and returns false positives (matches function names, imported modules, etc.). Use explicit initialization or `try/except NameError` if truly dynamic.
 - **Initialize `summary` before the `for entry in data_list` loop** — The `summary` variable is set inside the loop body (`summary = entry.get("summary", "")`) and referenced after the loop for noise suppression (`if isinstance(summary, str) and signals_found:`). If `data_list` is empty or contains no dict entries, `summary` is never assigned, causing `UnboundLocalError` at the suppression check. Always initialize `summary = ""` before the entry loop. Same class of bug as `truly_new`/`remaining_proposals` — any variable set inside a loop and used after it must be initialized before the loop.
 
+## `append_jsonl` Dict-Key Corruption (MANDATORY — 2026-06-26)
+
+**BUG:** `praxis_common.append_jsonl(path, records)` iterates over `records`. When callers pass a **single dict** instead of a list, Python iterates over the dict's **keys** (strings), writing each key as a bare string line to the JSONL file. This corrupts the file with entries like `"journal_id"`, `"evaluated_at"` instead of proper JSON objects.
+
+**FIX (applied to praxis_common.py):** The function now auto-wraps single dicts:
+```python
+def append_jsonl(path, records):
+    if isinstance(records, dict):
+        records = [records]
+    with open(path, "a") as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+```
+
+**PREVENTION:** When writing ingest scripts, always pass a list to `append_jsonl`:
+```python
+# CORRECT
+append_jsonl(EVAL_FILE, [{"journal_id": jid, "action_taken": "no_signal"}])
+
+# WRONG — corrupts file with bare key strings
+append_jsonl(EVAL_FILE, {"journal_id": jid, "action_taken": "no_signal"})
+```
+
+**DETECTION:** After every ingest, verify the eval file tail contains only valid JSON dicts:
+```bash
+tail -5 journals_evaluated.jsonl | python3 -c "
+import sys, json
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    obj = json.loads(line)
+    assert isinstance(obj, dict), f'CORRUPTED: {line}'
+"
+```
+
+**RECOVERY:** If corruption detected, filter and rewrite (see `references/session-20260626-dispatch-append-jsonl-bug.md`).
+
 ## Python Anti-Patterns in Ingest Scripts (MANDATORY)
 
 ### Never use `dir()` to check variable existence — in ANY context
@@ -1091,6 +1132,34 @@ if len(active_shifts) >= 12:
 else:
     # ... shift proposal logic ...
 ```
+
+### Writing complex Python scripts — heredoc and write_file corruption (MANDATORY — 2026-06-29)
+
+When writing multi-line Python ingest/post-processing scripts, **do NOT use `write_file()` or inline `python3 -c "..."` in `terminal()`** for scripts longer than ~20 lines. Both paths corrupt content:
+- `write_file()` silently merges adjacent lines and drops/mangles quote characters (confirmed: 3 consecutive `SyntaxError: unterminated string literal` from a single write_file call).
+- Inline `python3 -c "..."` hits shell-quoting limits and the tool's own content-length caps.
+
+**Correct pattern — use `cat > /tmp/script.py << 'ENDOFSCRIPT'` in `terminal()`:**
+
+```python
+terminal("cat > /tmp/praxis_post_ingest.py << 'ENDOFSCRIPT'\n<python code here — quotes, braces, f-strings all safe because single-quoted heredoc delimiter prevents shell expansion>\nENDOFSCRIPT")
+```
+
+Then run with `python3 /tmp/praxis_post_ingest.py`.
+
+**Why this works:** The single-quoted `'ENDOFSCRIPT'` delimiter tells bash to pass the heredoc body through literally — no variable expansion, no quote interpretation, no escape mangling. The content arrives at disk byte-identical to what you wrote.
+
+**After writing, always verify with a syntax check before running:**
+```bash
+python3 -c "compile(open('/tmp/praxis_post_ingest.py').read(), 'praxis_post_ingest.py', 'exec'); print('OK')"
+```
+
+**Clean up temp scripts after use:**
+```bash
+rm -f /tmp/praxis_post_ingest.py
+```
+
+Confirmed 2026-06-29: A 246-line post-ingest checklist script was written successfully on the first try via `cat << 'EOF'` after 3 consecutive `write_file()` attempts all produced `SyntaxError`. The heredoc approach is now the production pattern for ad-hoc Praxis scripts.
 
 ### Forge no-op result variants
 
