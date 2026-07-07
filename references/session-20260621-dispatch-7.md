@@ -1,43 +1,32 @@
-# Session 2026-06-21 Dispatch (06:32Z) — Multi-Skill Dispatch, All Pipelines Clean
+# Praxis Dispatch Ingest — 2026-06-21
 
-## Trigger
-`dispatcher.py` triggered multi-skill dispatch (Forge + Mentor + Praxis) with 6 new journal entries:
-- 1x `ocas-forge/forge-journal-scan-*` (06:25Z)
-- 3x `ocas-mentor/mentor-light-*` (06:21–06:23Z)
-- 2x `ocas-praxis/praxis-cron-*` + `praxis-dispatch-*` (06:21Z)
+**Date**: 2026-06-21T21:31Z  
+**Run ID**: praxis-dispatch-20260621T213124Z  
+**Source**: Multi-skill dispatch (Forge + Mentor + Praxis)
 
-## Execution
+## New Journals Found: 5
 
-### Pipeline 1: Forge Journal Scan
-- Result: No-op. All `vp_*.json` / `vd_*.json` files already in `intake/processed/`.
+| Journal | Type | Signals |
+|---------|------|---------|
+| `ocas-forge/forge-scan-20260621T212209Z.json` | forge no-op | None — all proposals processed |
+| `ocas-forge/forge-scan-20260621T212902Z.json` | forge no-op | None — clean scan |
+| `ocas-mentor/mentor-light-20260621T212407Z-caller.json` | mentor light | None — success, 0 errors |
+| `ocas-mentor/mentor-light-20260621T212809Z.json` | mentor light | None — success, 0 errors |
+| `ocas-mentor/mentor-light-20260621T212937Z.json` | mentor light | None — success, 0 errors |
 
-### Pipeline 2: Mentor Light Heartbeat
-- Files scanned: 1,656 (dual-path, 3-day window)
-- New files ingested: 1
-- `active_skills_30d`: 13 (stdin) → 18 (corrected dual-path 30d) — **13th confirmation**
-- All 3 writes succeeded: evidence (+1 script +1 corrected), ingestion (+1), journal written
-- Errors: 0, anomalies: 0, gaps: 0
+**Result**: 0 events extracted, 0 lessons, 0 shifts. All journals routine operational scans.
 
-### Pipeline 3: Praxis Dispatch Ingest
-- **Pre-run timestamp captured** before Mentor heartbeat ran (critical for collision avoidance)
-- New journals found via mtime (Python comparison, not `find -newermt`): 4
-  - `ocas-forge/2026-06-21/forge-journal-scan-20260621T062554Z.json` → no-op
-  - `ocas-mentor/2026-06-21/mentor-light-20260621T062724Z.json` → success, filtered
-  - `ocas-mentor/2026-06-21/mentor-light-20260621T062959Z.json` → success, filtered
-  - `ocas-praxis/2026-06-21/praxis-dispatch-20260621T062554Z.json` → self-referential, filtered
-- Events extracted: 0 (all routine success/no-op)
-- Parse failures: 0
-- Eval entries written: 4
+## Techniques Verified
 
-## Key Observations
-- Cross-pipeline state collision avoided: captured `last_ingest_run` before Mentor heartbeat ran
-- Mentor-light journals correctly filtered as routine noise (no false-positive events)
-- Forge journal-scan was a clean no-op (no unprocessed variants)
-- All three pipelines wrote their own journals independently (multi-skill dispatch pattern)
-- `find -newermt` timezone bug confirmed again: Python mtime comparison is the reliable method
+1. **Pre-Mentor timestamp capture**: `last_ingest_run` read from `ingest_state.json` before Mentor ran. Value: `2026-06-21T21:23:38.005521+00:00`. This prevented the Mentor heartbeat script from advancing the timestamp past the journals it wrote, which would have caused Praxis to miss them.
 
-## System Health
-- Events: no change
-- Active shifts: 12/12 (at cap, no change)
-- Evaluated journals: +4
-- State: clean
+2. **Self-reference exclusion**: Praxis own journals (`ocas-praxis/`) excluded from ingest scan via path check. The 6th journal found by `find -newermt` was `praxis-dispatch-20260621T212209Z.json` (from this same dispatch's earlier run) — correctly excluded.
+
+3. **mtime-based discovery**: Used `os.path.getmtime(fpath)` comparison against captured epoch timestamp, bypassing the broken `journals_evaluated.jsonl` dedup (path format mismatch persists).
+
+## State After
+
+- `total_ingests`: 69 → 70
+- `last_evaluated_count`: 10444 → 10449
+- `active_shifts`: 12/12 (at cap, no changes)
+- `last_ingest_events_added`: 0
