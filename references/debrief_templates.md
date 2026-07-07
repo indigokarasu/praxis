@@ -16,29 +16,50 @@
 ## Debrief template
 
 ```
-# Praxis Debrief — {date}
+# Praxis Debrief — {date} ({time} UTC)
 
-## Events recorded: {N}
-{List of new events with failure phase tags}
+## System Status
 
-## Lessons extracted: {N}
-{List of lessons with causal grounding level}
-- [LESSON] What: ... Why: ... When: ... [confidence: high/med/low]
-- [REJECTED] What: ... Reason: insufficient grounding / below threshold
+| Metric | Value |
+|--------|-------|
+| Total events recorded | {N} |
+| Active shifts | {N} (cap: 12, headroom: {N}) |
+| Shifts expired (all time) | {N} |
+| Lessons extracted (all time) | {N} |
+| Last ingest | {timestamp} ({N} new events) |
+| Last event recorded | {timestamp} ({domain}/{signal}) |
 
-## Behavior shifts activated: {N}
-- [SHIFT] {shift_text} [phase: planning/execution/response] [reinforcement: Nth application]
-- Shift targeting: {which phase this shift addresses}
+## Active Shifts ({N}/12)
 
-## Behavior shifts decayed/expired: {N}
-- [EXPIRED] {shift_text} Reason: no reinforcement for {N} days
-- [REJECTED] {shift_text} Reason: {why rejected}
+| # | Shift | Domain | Signal | Phase | Created | Age | Reinforcements |
+|---|-------|--------|--------|-------|---------|-----|----------------|
+| 1 | {shift_id} | {domain} | {signal} | {phase} | {date} | {N} days | {N} |
 
-## Active shift summary
-{Current count}/12 active shifts. {N} consolidated (3+ reinforcements). {N} provisional (1-2). {N} stale (approaching expiry).
+**⚠ Decay alert:** Note any shifts approaching 14-day TTL with 0 reinforcements.
 
-## Open questions
-{What we still don't know — unanswered causal mechanisms, uncertain boundary conditions}
+## Decay Check
+
+- **Shifts past threshold:** {N}
+- **Borderline (10-13 days, 0 reinforces):** {N} — list them
+- **Pattern status:** Are the signal types still occurring or have they gone quiet?
+
+## Consolidation Check
+
+**Overlaps found:** {N} — detail any shifts sharing (domain, signal_type, phase) tuples.
+
+## Recent Activity (Last 7 Days)
+
+| Date | Events | Notes |
+|------|--------|-------|
+| {date} | {N} | {summary} |
+
+## Open Questions
+
+{Carry forward from prior debriefs, mark resolved ones}
+
+## Recommendations
+
+{Actionable items: monitor patterns, let shifts expire, investigate gaps}
 ```
 
 ## Causal grounding assessment

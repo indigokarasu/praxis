@@ -13,9 +13,22 @@ This template implements all mandatory gotcha filters:
   - Mentor-light noise filters (failure_keyword, gap_detected, low_coverage)
   - Forge no-op filter (startswith matching)
   - Custodian action journal filter (error mentions in summary)
+  - Dispatch-triage filter (email triage records are not behavioral signals)
   - (source_journal, signal_type) dedup
   - Null-phase event filtering
   - NOISE_SIGNAL_TYPES gate
+
+NOTE: This template handles the PRIMARY ingest pass only. After running it,
+you MUST also complete these post-ingest steps (see SKILL.md § Cron Execution
+Checklist and the ocas-forge references/dispatch-pipeline-guide.md § Third-Wave
+Mitigation):
+  1. Third-wave mitigation: add all dispatch-output journals (forge-scan-,
+     mentor-light-, praxis-dispatch-) to journals_evaluated.jsonl
+  2. Gap backfill: os.walk for .json files with mtime > last_ingest_run not
+     in eval (catches cross-skill journals, concurrent cron gaps)
+  3. Noise lesson cleanup: remove confidence:low lessons from lessons.jsonl
+  4. State file sync: set journals_evaluated_count = wc -l of eval file
+  5. Decay-risk scan: check active shifts for reinforcement_count==0, age>7d
 """
 
 import json
@@ -99,7 +112,18 @@ def main():
     state = {"last_ingest_run": "2020-01-01T00:00:00+00:00", "last_lesson_extraction_event_id": None}
     if os.path.exists(STATE_FILE):
         state = json.load(open(STATE_FILE))
-    last_ingest_run = state.get("last_ingest_run", "2020-01-01T00:00:00+00:00")
+    # CRITICAL: In multi-skill dispatch (Forge+Mentor+Praxis), Mentor heartbeat
+    # runs before Praxis and updates ingest_state.json:last_ingest_run. Reading
+    # the state file here causes Praxis to find 0 new journals (mtime comparison
+    # fails because the state timestamp moved forward). Override with CAPTURED_TS
+    # env var captured BEFORE sibling pipelines run.
+    #   Usage: CAPTURED_TS="2026-06-21T12:58:35Z" python3 dispatch_ingest_*.py
+    captured_ts = os.environ.get("CAPTURED_TS", "")
+    if captured_ts:
+        last_ingest_run = captured_ts
+        print(f"Using CAPTURED_TS override: {last_ingest_run}")
+    else:
+        last_ingest_run = state.get("last_ingest_run", "2020-01-01T00:00:00+00:00")
 
     seen_ids = set()
     if os.path.exists(EVAL_FILE):
@@ -128,6 +152,11 @@ def main():
         for skill_dir in sorted(os.listdir(jdir)):
             skill_path = os.path.join(jdir, skill_dir)
             if not os.path.isdir(skill_path) or skill_dir == "ocas-praxis":
+                # ocas-praxis/ journals are self-referential (produced by this pipeline).
+                # ocas-dispatch/ journals (dispatch-wave, dispatch-triage) are also
+                # dispatch-output artifacts that don't carry behavioral signals.
+                # Both are caught during third-wave mitigation (post-ingest cleanup),
+                # not during the primary ingest pass.
                 continue
             for date_dir in sorted(os.listdir(skill_path)):
                 date_path = os.path.join(skill_path, date_dir)
@@ -143,7 +172,9 @@ def main():
                     try:
                         mtime = os.path.getmtime(full_path)
                         last_ingest_dt = datetime.fromisoformat(last_ingest_run.replace("Z", "+00:00"))
-                        if datetime.fromtimestamp(mtime, tz=timezone.utc) > last_ingest_dt:
+                        # Use >= not >: journals written at the exact same second as last_ingest_run
+                        # should still be captured. The eval dedup prevents re-processing.
+                        if datetime.fromtimestamp(mtime, tz=timezone.utc) >= last_ingest_dt:
                             new_journals.append((full_path, journal_id, skill_dir))
                     except (OSError, ValueError):
                         pass
@@ -191,6 +222,12 @@ def main():
         if skill_dir == "ocas-custodian" and data.get("type") == "observation":
             no_signal += 1
             eval_entries.append(json.dumps({"journal_id": journal_id, "action_taken": "no_signal_custodian_observation"}))
+            continue
+
+        # Dispatch-triage journals are email triage records, not behavioral signals
+        if skill_dir == "ocas-dispatch" and "triage" in journal_id:
+            no_signal += 1
+            eval_entries.append(json.dumps({"journal_id": journal_id, "action_taken": "no_signal_dispatch_triage"}))
             continue
 
         if has_custodian_action_error_mention(data, journal_id):
@@ -251,7 +288,10 @@ def main():
     state["events_recorded"] = state.get("events_recorded", 0) + events_added
     state["last_ingest_events_added"] = events_added
     state["last_ingest_journals_evaluated"] = len(eval_entries)
-    state["last_evaluated_count"] = state.get("last_evaluated_count", 0) + len(eval_entries)
+    prev_count = state.get("last_evaluated_count", 0)
+    if isinstance(prev_count, list):
+        prev_count = prev_count[0] if prev_count else 0
+    state["last_evaluated_count"] = prev_count + len(eval_entries)
     state["last_praxis_dispatch"] = now_iso
     state["note"] = f"Dispatch ingest: {len(new_journals)} journals, {events_added} events"
     with open(STATE_FILE, "w") as f:

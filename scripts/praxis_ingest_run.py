@@ -18,10 +18,60 @@ from praxis_common import (
 )
 
 
+NOISE_SIGNAL_TYPES = {"", "unknown", "?", "no_op", "forge_activity", "routine",
+                      "no_signal", "cron_error", "cron_errors", "observation", "success",
+                      "mentor_light", "correction", "low_coverage", "gap_detected"}
+
+def is_false_positive_journal(journal_data, journal_path):
+    """Check if this journal is a known false-positive source. Returns True to skip."""
+    journal_name = os.path.basename(journal_path).lower()
+    # Extract skill directory: path is skill/YYYY-MM-DD/filename.json or skill/filename.json
+    path_parts = journal_path.split('/')
+    skill_dir = path_parts[0] if path_parts else ''
+    jtype = journal_data.get('type', '')
+    outcome = str(journal_data.get('outcome', '')).lower().strip()
+    summary = str(journal_data.get('summary', '')).lower()
+
+    # Mentor-light: outcome=success or no outcome + no explicit failure → skip generic extraction
+    if 'mentor-light' in journal_name or 'mentor-light' in journal_path:
+        if outcome in ('success', '', 'none', 'null'):
+            metrics = journal_data.get('metrics', {})
+            errors = metrics.get('errors', 0) if isinstance(metrics, dict) else 0
+            gap = journal_data.get('gap_detected', False)
+            if errors == 0 and not gap:
+                return True
+
+    # Custodian observation: routine scan, no behavioral signal
+    if skill_dir == 'ocas-custodian' and jtype == 'observation':
+        return True
+
+    # Custodian light-scan action with error mentions in summary (known/tracked issues)
+    if skill_dir == 'ocas-custodian' and jtype == 'action':
+        if 'error' in summary and 'escalation_needed' not in journal_data:
+            return True
+
+    # Custodian light-scan without type field — routine operational report
+    # Some custodian journals (esp. post-2026-06-22) lack a `type` key entirely.
+    # Check by run_id pattern + no escalation_needed + no persistent_failures.
+    if skill_dir == 'ocas-custodian' and not jtype:
+        run_id = journal_data.get('run_id', '')
+        if 'light-scan' in run_id.lower() or 'deep-scan' in run_id.lower():
+            escalation = journal_data.get('escalation_needed')
+            persistent = journal_data.get('cron_registry', {}).get('persistent_errors', 0)
+            if not escalation and not persistent:
+                return True
+
+    return False
+
 def extract_signals(journal_data, journal_path):
     """Extract behavioral signals from a journal entry. Core Praxis logic."""
     signals = []
     if not journal_data:
+        return signals
+
+    # MANDATORY: Apply false-positive filters BEFORE any signal extraction
+    if is_false_positive_journal(journal_data, journal_path):
+        signals.append({'type': 'no_signal', 'severity': 'none', 'summary': 'Filtered: routine/healthy journal', 'phase': 'execution'})
         return signals
 
     if journal_data.get('escalation_needed') is True:
@@ -89,13 +139,19 @@ def extract_signals(journal_data, journal_path):
             if any(k in ss for k in ['fail', 'error', 'block', 'degrad']):
                 signals.append({'type': 'failure_keyword', 'severity': 'medium', 'summary': str(summary_obj)[:200], 'phase': 'execution'})
 
-    for action in journal_data.get('actions_taken', []):
+    actions_taken = journal_data.get('actions_taken', [])
+    if isinstance(actions_taken, int):
+        actions_taken = []
+    for action in actions_taken:
         if isinstance(action, dict):
             outcome = str(action.get('outcome', '')).lower()
             if outcome in ('error', 'failed', 'failure', 'blocked'):
                 signals.append({'type': 'action_failure', 'severity': 'high', 'summary': f"Action failed: {outcome}", 'phase': 'execution'})
 
-    for blocker in journal_data.get('active_blockers', []):
+    active_blockers = journal_data.get('active_blockers', [])
+    if isinstance(active_blockers, int):
+        active_blockers = []
+    for blocker in active_blockers:
         if isinstance(blocker, dict):
             bid = blocker.get('id', '')
             impact = blocker.get('impact', '')
@@ -105,7 +161,10 @@ def extract_signals(journal_data, journal_path):
             elif bid:
                 signals.append({'type': 'platform_failure', 'severity': 'medium', 'summary': f"Active blocker: {bid} — {impact[:100]}", 'phase': 'execution', 'fingerprint': bid})
 
-    for finding in journal_data.get('new_findings', []):
+    new_findings = journal_data.get('new_findings', [])
+    if isinstance(new_findings, int):
+        new_findings = []
+    for finding in new_findings:
         if isinstance(finding, dict) and finding.get('severity') in ('critical', 'error', 'high'):
             signals.append({'type': 'new_finding', 'severity': 'high', 'summary': finding.get('title', 'Unknown'), 'phase': 'planning'})
 
@@ -156,7 +215,7 @@ def main():
                 new_eval_entries.append({'journal_id': canonical_id_str, 'evaluated_at': now_iso(), 'action_taken': 'unreadable'})
                 continue
 
-            signals = extract_signals(journal_data, full_path)
+            signals = extract_signals(journal_data, canonical_id_str)
             if signals:
                 priority = {'escalation': 0, 'execution_error': 1, 'action_failure': 2, 'new_finding': 3, 'failure_keyword': 4, 'correction': 5}
                 signals.sort(key=lambda s: priority.get(s['type'], 99))
@@ -206,9 +265,12 @@ def main():
             valid_event_ids.add(eid)
         domain = evt.get('domain', 'unknown')
         phase = evt.get('failure_phase', 'null')
+        sig_type = evt.get('signal_type', 'unknown')
         if domain in ('unknown', None, '', 'null') or phase in ('null', None, ''):
             continue
-        key = (domain, phase, evt.get('signal_type', 'unknown'))
+        if sig_type in NOISE_SIGNAL_TYPES:
+            continue
+        key = (domain, phase, sig_type)
         pattern_groups.setdefault(key, []).append(evt)
 
     existing_lessons = load_jsonl(LESSONS_FILE)
