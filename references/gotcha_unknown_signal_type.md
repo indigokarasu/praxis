@@ -16,3 +16,11 @@ Skip events with `signal_type` in `("unknown", "?", None, "")` before building p
 - `scripts/praxis_ingest_run.py` — pattern grouping loop
 - `references/journal_ingestion.md` — lesson extraction rules
 - `references/lesson_rules.md` — When NOT to extract section
+
+## Variant: Post-v3.0 Schema Regression (2026-06-25)
+
+Lessons extracted with `signal_type: '?'` from recent ingest runs (June 25-26) — these are NOT legacy events. The ingest script's lesson extraction pass is producing lessons without populating `signal_type`, causing them to fail the unknown-signon filter AND block the shift proposal pipeline entirely (27 lessons on June 25 alone, 0 shifts proposed).
+
+**Detection:** `grep -c '"signal_type": "?"' lessons.jsonl` — if count grows between runs, the extraction pass is regressed.
+
+**Fix:** In the lesson extraction Pass 2 (upgrade pass), if `signal_type` is missing or `'?'`, skip the lesson. Do NOT write lessons without a valid `signal_type` to `lessons.jsonl`.

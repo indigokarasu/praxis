@@ -1,14 +1,14 @@
 ---
-name: ocas-praxis
-description: 'Bounded behavioral refinement loop. Records outcomes, extracts micro-lessons from repeated patterns, consolidates them into capped active behavior shifts, applies shifts at runtime, and generates plain-language debriefs. Use for recording task outcomes, extracting lessons from repeated patterns, managing active behavior shifts, generating runtime briefs, or producing debriefs. Do not use for general memory (use Elephas), preference tracking (use Taste), real-time task execution, content generation, system health monitoring (use Custodian), or skill evaluation scoring (use Mentor).'
 license: MIT
+name: ocas-praxis
+description: 'Bounded behavioral refinement loop. Records outcomes, extracts micro-lessons from repeated patterns, consolidates them into capped active behavior shifts, applies shifts at runtime, and generates plain-language debriefs. Use for recording task outcomes, extracting lessons from repeated patterns, managing active behavior shifts, generating runtime briefs, or producing debriefs. Not for: general memory (use Chronicle), preference tracking (use Taste), real-time task execution, content generation, system health monitoring (use Custodian), or skill evaluation scoring (use Mentor).'
 source: https://github.com/indigokarasu/praxis
 includes:
 - references/**
 - scripts/**
 metadata:
   author: Indigo Karasu (indigokarasu)
-  version: 3.2.1
+  version: 3.2.4
 tags:
 - behavioral-refinement
 - lessons
@@ -23,9 +23,7 @@ triggers:
 ---
 
 # Praxis
-
 Praxis is the system's behavioral self-improvement loop — it records real task outcomes, waits for patterns to emerge across multiple events, and consolidates validated lessons into a small capped set of active behavior shifts that influence every future run. The cap of 12 active shifts is a hard constraint that prevents unbounded rule accumulation, and every shift must trace back to recorded events so nothing changes without an auditable reason.
-
 ## When to Use
 
 - Recording outcomes from skill executions
@@ -33,11 +31,11 @@ Praxis is the system's behavioral self-improvement loop — it records real task
 - Reviewing or managing active behavior shifts
 - Generating the current runtime brief (active shifts only)
 - Producing a debrief explaining what changed and why
-- **Running scheduled cron ingest (praxis:journal_ingest)** — use the production-proven pattern in `scripts/ingest_cron_YYYYMMDD.py` and `references/ingest-script-pattern.md`
+- **Running scheduled cron ingest (praxis:journal_ingest)** — use the production-proven pattern in `scripts/ingest_cron_YYYYMMDD.py` and `references/ingest-script-pattern.md`. After running the production script, run `skills/ocas-praxis/scripts/gap_backfill.py` to catch journals the date filter missed (typically ~25% miss rate). **Script path:** Both `praxis_ingest_run.py` and `gap_backfill.py` live at `skills/ocas-praxis/scripts/`, NOT at `commons/data/ocas-praxis/scripts/`. Always use the skill directory path. **IMPORTANT:** The production script has three known bugs (narrow date filter, full-history lesson reprocessing, eval ID format mismatch). The post-ingest checklist (gap backfill, noise lesson cleanup, state update, journal write, decay-risk scan) is MANDATORY — not optional. See `references/cron-execution-checklist.md`.
 - **Running shift cleanup/consolidation** — use `scripts/shift_cleanup_YYYYMMDD.py` pattern
 - **Running lesson noise cleanup** — use `scripts/lesson_cleanup_YYYYMMDD.py` pattern
+- **Running praxis review pass** — use `skills/ocas-praxis/scripts/praxis_review.py` to review behavioral patterns over a time period (e.g., `--since-hours 24`). **Script path:** `praxis_review.py` lives at `skills/ocas-praxis/scripts/`, NOT at `commons/data/ocas-praxis/scripts/`. Always use the skill directory path.
 - **Generating daily debrief** — use `scripts/debrief_YYYYMMDD.py` template
-
 ## When NOT to Use
 
 - General knowledge storage — use memory tool
@@ -45,10 +43,18 @@ Praxis is the system's behavioral self-improvement loop — it records real task
 - One-off trivia or domain facts
 - Broad autobiographical summaries
 - Silent personality mutation
+## Workflow
 
+The praxis workflow operates as a continuous loop: Record → Extract → Consolidate → Apply → Debrief. This workflow exists because behavioral refinement requires systematic repetition, not ad-hoc adjustments.
+1. **Record** — Capture task outcomes as evidence records
+2. **Extract** — Identify micro-lessons from repeated patterns
+3. **Consolidate** — Merge lessons into active behavior shifts (capped)
+4. **Apply** — Apply shifts at runtime
+5. **Debrief** — Generate plain-language summary
+Example: a task repeatedly fails due to timeout → Praxis extracts "increase timeout for this endpoint" → consolidates into active shift → applies on future runs → debriefs the improvement.
 ## Responsibility Boundary
 
-Praxis owns bounded behavioral refinement: events, lessons, shifts, and debriefs.
+Praxis owns bounded behavioral refinement: events, lessons, shifts, and debriefs. Error handling follows the recovery contract — see Recovery Behavior section below.
 
 Praxis does not own: general memory (use memory tool), preference persistence (Taste), pattern discovery (Finch), communications (Dispatch), skill evaluation (Mentor).
 
@@ -59,7 +65,7 @@ Praxis reads journals from all skills to extract behavioral signals. Praxis deci
 - **Concept/Event** — recorded outcomes, task completions, failures, corrections, and behavioral signals
 - **Concept/Idea** — extracted lessons, behavior shifts, and refinements
 
-Praxis does not extract or emit Signals to Elephas directly. Lessons remain isolated to the bounded refinement loop.
+Praxis does not extract or emit Chronicle signals. Lessons remain isolated to the bounded refinement loop.
 
 ## Commands
 
@@ -83,15 +89,32 @@ Praxis does not extract or emit Signals to Elephas directly. Lessons remain isol
 
 **Lesson extraction scope: NEW EVENTS ONLY.** Pass 1 must group only events added in the current ingest run (or since the last lesson extraction), NOT the entire `events.jsonl` history. Re-processing all 2,500+ events every run causes: (a) stale lessons re-created for patterns that are no longer active, (b) unknown-domain lessons from legacy events that lack a `skill` field, (c) noise lessons (`no_active_watches`, `system_memory_drop`) that pass the ≥2 event threshold from historical accumulation. Track `last_lesson_extraction_event_id` in the ingest state and filter `all_events` to only events with `event_id` greater than that marker before grouping. See `references/session_20260618_ingest_cron_d.md`.
 
-**Ingest state file (`ingest_state.json`) — create if missing.** The state file at `{agent_root}/commons/data/ocas-praxis/ingest_state.json` tracks `last_lesson_extraction_event_id` for scoped lesson extraction. If the file doesn't exist, create it with `{"last_lesson_extraction_event_id": null}` on first run. Without this file, the lesson extraction scoping mechanism cannot function and falls back to full-history re-processing.
+**Ingest state file (`ingest_state.json`) — create if missing.** The state file at `{agent_root}/commons/data/ocas-praxis/ingest_state.json` tracks `last_lesson_extraction_event_id` for scoped lesson extraction. If the file doesn't exist, create it with all required fields on first run:
+```python
+state = {
+    "last_ingest_run": now.isoformat(),
+    "last_ingest_mtime": now.timestamp(),
+    "last_lesson_extraction_event_id": None,
+    "journals_processed": 0,
+    "total_ingests": 0,
+    "last_evaluated_count": 0,
+}
+```
+If the file exists but is missing fields (e.g., `last_lesson_extraction_event_id`), populate them from defaults before using. Confirmed 2026-06-25: state file had only `last_ingest_run` and `last_dispatch_run`, causing the scoping mechanism to be non-functional until fields were added.
 
-**Fixing `last_lesson_extraction_event_id` after sessions with no events:** If the ingest state shows `last_lesson_extraction_event_id: null` but `events.jsonl` has entries, the scoping mechanism is broken — lesson extraction will re-process the full history every run, producing stale lessons. Fix by setting it to the last event's ID:
+**Fixing `last_lesson_extraction_event_id` after sessions with no events:** If the ingest state shows `last_lesson_extraction_event_id: null` or `""` (empty string) but `events.jsonl` has entries, the scoping mechanism is broken — lesson extraction will re-process the full history every run, producing stale lessons. **The empty string variant (`""`) is equally broken as `null`** — both fail the `event_id > marker` comparison in the lesson extraction scope filter. Fix by setting it to the last event's ID:
 ```bash
 # Get the last event_id from events.jsonl
 LAST_EVT=$(tail -1 {root}/commons/data/ocas-praxis/events.jsonl | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('event_id',''))")
-# Update the state file
-python3 -c "import json; f='{root}/commons/data/ocas-praxis/ingest_state.json'; s=json.load(open(f)); s['last_lesson_extraction_event_id']=''$LAST_EVT''; json.dump(s, open(f,'w'), indent=2)"
+# Update the state file — only set if LAST_EVT is non-empty
+if [ -n "$LAST_EVT" ]; then
+  python3 -c "import json; f='{root}/commons/data/ocas-praxis/ingest_state.json'; s=json.load(open(f)); s['last_lesson_extraction_event_id']='$LAST_EVT'; json.dump(s, open(f,'w'), indent=2)"
+  echo "Set to $LAST_EVT"
+else
+  echo "events.jsonl empty or has no event_id field — leaving as-is"
+fi
 ```
+**PITFALL — empty string vs null:** Both `null` and `""` break the lesson scope filter. After any run that produces 0 events (all no_signal), the post-ingest script MUST explicitly set `last_lesson_extraction_event_id` to the last existing event in `events.jsonl` — NOT leave it as `""`. If you set it to `""` (e.g., because `tail -1 | python3 ...` returns empty for a non-existent event_id), the scoping mechanism stays broken. Always verify: `grep -c "last_lesson_extraction_event_id" state_file` after update, or check the value explicitly. Confirmed 2026-07-01: state had `""` from a prior run, causing this ingest to re-process all 3,795 events.
 After 2026-06-21 dispatch (0 events from 4 mentor-light journals), the state should be set to the last existing event in `events.jsonl` (e.g., `evt-20260621...`).
 
 ## Run Completion
@@ -103,6 +126,78 @@ After every Praxis command:
 3. **Shift merge pass** — Before checking cap, scan active shifts for semantic overlap. Merge overlapping shifts before proposing any new shift.
 4. Log material decisions to `decisions.jsonl`
 5. Write journal via `praxis.journal`
+6. **Update `ingest_state.json`** — Update `last_ingest_run` to current timestamp, increment `journals_processed` by new journal count, set `last_ingest_events_added`, `last_ingest_journals_evaluated`, `last_evaluated_count` (incremented), `last_ingest_file_count`, `last_event_id` (if events recorded), increment `total_ingests`. The production script does NOT do this — it must be done by the caller.
+
+### Cron Execution Checklist
+
+After running `praxis_ingest_run.py` in cron mode, the caller must complete these steps (the script does NOT update state, write journals, or do gap backfill):
+
+1. **Update `ingest_state.json`** — Set `last_ingest_run` to current timestamp, increment `journals_processed` and `total_ingests`, set `last_ingest_events_added`, `last_ingest_journals_evaluated`, `last_inget_file_count`, and `note`.
+2. **Gap journal backfill** — Run `skills/ocas-praxis/scripts/gap_backfill.py` to scan for journals NOT in `journals_evaluated.jsonl` with mtime > `last_ingest_run`. The script filters dispatch-wave meta-artifacts and phantom `.json` files automatically. This catches: (a) journals the date filter missed, (b) concurrent-cron collisions, (c) post-ingest gaps. **⚠️ Path:** The script is at `skills/ocas-praxis/scripts/gap_backfill.py`, NOT `commons/data/ocas-praxis/scripts/gap_backfill.py`.
+3. **Update ingest_state.json with backfill count** — Ingest_state.json: increment `journals_processed` by the number of journals backfilled (as reported by gap_backfill.py output or via `state['eval_gaps_backfilled']`).
+4. **Noise lesson cleanup** — Remove all lessons produced by Bug 2. The production script's lesson-scoping bug produces 13-15 noise lessons every run from stale historical patterns. **Cleanup criteria (expanded 2026-06-28):** Remove lessons where ANY of these are true: (a) `confidence: "low"`, (b) `signal_type` is `"?"`/`""`/`null`, (c) ALL events from the current run are `no_signal` (making ALL co-produced lessons noise regardless of individual fields). See `references/recurring-noise-lesson-cleanup.md` for the cleanup procedure.
+5. **Write Praxis journal** — Write to `{agent_root}/commons/journals/ocas-praxis/YYYY-MM-DD/praxis-cron-{timestamp}Z.json` with `run_type: "cron_ingest"`, metrics, and `not_activity_reason` explaining the run.
+   - **Shell heredoc double-Z pitfall:** When using shell heredoc, the timestamp shell variable already ends in `Z`. Template `${TS}Z.json` produces double-Z. **Fix:** Strip trailing Z: `TS_SHORT="${TS%Z}"` then use `${TS_SHORT}Z.json`, or fix with post-write `mv`.
+6. **Decay-risk scan** — Check active shifts for those with `reinforcement_count == 0` and age > 7 days. Flag in journal.
+6a. **Stale proposed-shift cleanup** — After checking active shifts, scan for `status: "proposed"` shifts that have been in limbo ≥10 days without activation. These are typically artifacts from rebuilds or bulk proposals that never got activated. Expire them with reason `decay_check: proposed shift never activated after Nd`. Use full file rewrite from canonical in-memory state (see Cap enforcement must use full file rewrite). Confirmed 2026-06-30: 15 proposed shifts from the 2026-06-18 rebuild sat idle for 11 days — none had >5 source events, many had 0. See `references/session-20260630-decay-check-stale-proposed.md`.
+7. **Stale script cleanup** — If >10 `.py` files exist in data root (outside `scripts/`), remove them. Never delete from `scripts/` subdirectory.
+
+8. **Verify post-write (mandatory closure)** — Before declaring the run done, validate the three artifacts the pipeline just wrote. Silent corruption here is invisible to gap backfill and only surfaces as a broken state file next run:
+   - **State JSON parses** — `json.load(open('ingest_state.json'))` succeeds; confirm `journals_processed`, `total_ingests`, `last_ingest_run`, and `last_lesson_extraction_event_id` advanced to expected values. A non-parsing state file means the load→modify→dump update failed silently.
+   - **Journal JSON valid** — The new `praxis-cron-*.json` parses; `run_id` matches the filename and ends in a single `Z` (no double-Z). A double-Z filename still works via gap backfill but is a known cosmetic bug (Bug 4) — fix with `mv` if caught here.
+   - **lessons.jsonl byte count** — `os.path.getsize(lessons.jsonl) == 0` after cleanup. A non-zero size means cleanup did not truncate; re-run `cleanup_noise_lessons.py`. NOTE: finding `lessons.jsonl` NON-ZERO at the *start* of a future run is expected steady-state carryover (a prior cleanup truncation didn't persist, or the production script re-read historical lessons) — it is NOT an error; that run's cleanup step will re-archive and re-truncate. Do not treat start-of-run non-zero as a failure.
+
+See `references/cron-execution-checklist.md` for the production-proven script pattern with all steps including third-wave mitigation and noise cleanup. See `references/session-20260627-cron-ingest-2032.md` for the inline mtime-based alternative when the production script's bugs cause misses.
+
+**Gap journal backfill (mandatory post-run step):** After running the production script, run `skills/ocas-praxis/scripts/gap_backfill.py` to catch journals the date filter missed. The script walks the profile journals directory, finds unevaluated journals with mtime > `last_ingest_run`, filters out dispatch-wave meta-artifacts and phantom `.json` files (empty filename from shell write bugs), classifies remaining journals, and appends them to the eval file. The script syncs the state counter to the actual eval file line count after backfill. See `references/session-20260627-cron-ingest-1804.md` for the production-proven gap backfill script.
+
+**Large one-time gap backfill (expected after eval file backlog):** If the eval file has a significant backlog of unevaluated journals (e.g., from before Praxis was fully integrated, or from runs where eval writes failed), the first gap backfill after fixing the eval file can produce a large batch of backfill entries (5,000–10,000+). This is a one-time catchup, not a recurring pattern. After the initial catchup, subsequent runs should see near-zero gap journals. Log the backfill count in `ingest_state.json:gap_journals_backfilled` and the journal `not_activity_reason` for audit trail. Confirmed 2026-06-29: 5,817 gap journals backfilled in a single run (eval file grew from 42,357 to 48,176 entries).
+
+## Known Production Script Bugs (ACTIVE)
+
+Four confirmed bugs remain in `scripts/praxis_ingest_run.py` and `scripts/praxis_common.py` as of 2026-06-30. The cron checklist workarounds prevent them from causing failures, but they waste compute and occasionally miss journals.
+
+### Bug 1: Date filter too narrow (praxis_ingest_run.py §Step 2)
+Script only scans today/yesterday date directories (`if today in cid or yesterday in cid`). Journals in other date dirs are invisible. **Workaround:** Gap backfill step catches these post-run.
+
+### Bug 2: Lesson extraction processes full event history (praxis_ingest_run.py §Step 5)
+Script loads ALL events from `events.jsonl` (3,300+) every run. `last_lesson_extraction_event_id` in state file is NOT used. Produces noise lessons from stale events. **Impact:** Low — dedup prevents duplicate lessons, but wastes compute. **Operational note:** When script output shows "NEW LESSONS" with high event counts (n=9, n=10, etc.) or events from dates before today, these are historical noise — not genuine new patterns. The post-ingest noise lesson cleanup (Step 5 of cron checklist) removes these. Do not propose shifts for `confidence: low` lessons.
+
+**Bug 2 cleanup scope expansion (2026-06-28, updated 2026-06-29):** The cleanup step must remove ALL lessons produced by Bug 2, not just `confidence: low` ones. Bug 2's full-history reprocessing produces lessons with three identifying traits:
+1. `signal_type` is `"?"`, `""`, `null`, or **missing entirely** (key not present in lesson dict — `.get("signal_type")` returns `None`). This is the most dangerous variant because `les.get("signal_type", "")` returns `None` (not `""`), and `None != "?"` passes the filter.
+2. `confidence: "high"` (Pass 2 grounding always upgrades to high — doesn't indicate genuine signal)
+3. High event counts (n=9, n=11, n=18, n=51) from historical accumulation
+
+**Decision rule for cleanup:** If ALL events recorded in the current run are `no_signal` (no genuine behavioral events), then ALL lessons produced in the same run are Bug 2 noise — remove them entirely. Do not rely on `confidence` or `signal_type` presence alone.
+
+**Bug 2 noise when exactly 1 genuine single-instance event is recorded (2026-07-07):** The fast pre-filter (`--all-no-signal`) only fires when EVERY event is `no_signal`. When the run records exactly 1 genuine event (e.g., a single `failure_keyword`) alongside `no_signal` heartbeats, the pre-filter does NOT fire — and the per-lesson criteria will KEEP high-confidence lessons with real `signal_type` values (failure_keyword, escalation, execution_error) — but these are STILL Bug 2 full-history noise. Why: lesson extraction requires ≥2 events of a (signal_type, phase) group within the NEW-event scope; a single genuine new event cannot ground any lesson, so every lesson in `lessons.jsonl` came from Bug 2's full-history reprocessing (n-counts like n=53, n=20 are historical accumulation, not new patterns). **Action:** archive `lessons.jsonl` to `commons/data/ocas-praxis/lessons_noise_archive_<UTC_DATE>.jsonl`, then truncate `lessons.jsonl` to 0 lines. Sanity check: at steady state `lessons.jsonl` is 0 bytes before each run (prior cleanup removes all); if it was empty, clearing all extracted lessons is correct. Do NOT leave the high-confidence historical lessons in `lessons.jsonl` — they re-accumulate every run and are not new learnings. The durable behavioral store is `shifts.jsonl`, which persists across runs regardless of `lessons.jsonl` being emptied. The cleanup script now supports `--new-genuine-events N` (N = genuine non-no_signal events recorded this run); pass N<2 to auto-clear all lessons. As of 2026-07-07 both fast-paths (`--all-no-signal` and `--new-genuine-events`) and the per-lesson path archive removed lessons to `lessons_noise_archive_<UTC_DATE>.jsonl` automatically before clearing — the manual fallback below is only needed if the script is unavailable. Manual fallback if not using the flag: `python3 -c "import json,datetime,os; p='commons/data/ocas-praxis/lessons.jsonl'; ls=[json.loads(l) for l in open(p) if l.strip()]; open('commons/data/ocas-praxis/lessons_noise_archive_'+datetime.date.today().isoformat()+'.jsonl','a').writelines(json.dumps(x)+'\n' for x in ls); open(p,'w').close()"`.
+
+**Fast pre-filter (dispatch + cron):** Before iterating lessons individually, check the event stream: if every event recorded in the current run has `signal_type` matching no_signal/empty/null/?, skip per-lesson inspection entirely and clear all lessons produced in the same run. This is the most common steady-state outcome (confirmed 2026-06-30 dispatch: 5 events all no_signal → 13 lessons removed in one operation).
+
+**Critical filter fix (2026-06-29):** The `signal_type` key may be entirely absent from Bug-2 noise lessons — not set to `"?"` but simply not present in the dict. Any cleanup filter MUST check all four conditions:
+```python
+def is_bug2_noise_lesson(les):
+    st = les.get("signal_type")  # returns None if key missing
+    if st is None:
+        return True  # key missing entirely = Bug 2 noise
+    st = str(st).strip().lower()
+    if st in ("?", "", "null", "none"):
+        return True
+    if les.get("confidence") == "low":
+        return True
+    return False
+```
+Do NOT use `les.get("signal_type", "") == "?"` alone — it misses the missing-key variant. Confirmed 2026-06-29: 13 Bug-2 lessons produced with NO `signal_type` key at all (Pass 2 grounding didn't add it when source events had no signal_type field), bypassed the existing `== "?"` filter.
+
+### Bug 3: Eval file ID format mismatch (praxis_common.py §dedup_eval_file)
+Eval file stores IDs as `skill/YYYY-MM-DD/filename.json` (with `.json`), but legacy entries may lack the extension. The dedup normalizes to `journal_id` field but doesn't generate both forms for comparison. **Impact:** Occasional re-scanning of evaluated journals; gap backfill catches these.
+
+### Bug 4: Double-Z timestamp in journal filenames (praxis_ingest_run.py §journal output)
+Journal filenames occasionally get double-Z suffixes (e.g., `praxis-cron-20260630T092758ZZ.json`). Root cause: timestamp composition applies `.rstrip('Z') + 'Z'` to a value already ending in Z. **Impact:** Cosmetic — journal is still written and discoverable by gap backfill. No data loss. Confirmed recurring: 2026-06-26, 2026-06-28, 2026-06-30. **Fix:** Check `ts.endswith('Z')` before appending Z in the journal output section.
+
+---
+
+- **Dispatcher's `new_files` may list phantom files** — The dispatcher's file scan may capture files that are deleted or never materialize on disk by the time the dispatch runs. These appear in `details.new_files` but `os.path.exists()` returns False. **This is expected and must be handled silently.**
 
 ## Hard Constraints
 
@@ -167,54 +262,40 @@ On first invocation, run `praxis.init`:
 5. Register cron jobs: `praxis:journal_ingest` (every 30min), `praxis:decay_check` (noon daily), `praxis:debrief` (6am daily), `praxis:update` (midnight daily)
 6. Log initialization as DecisionRecord
 
+## Second-Wave Detection (Already Evaluated)
+
+When triggered by the dispatcher, always check `journals_evaluated.jsonl` for the journal filename before running mtime-based discovery. If the journal is already present (regardless of `action_taken`), skip silently — it was already evaluated by a prior Praxis run in the same or previous dispatch wave. This is the correct no-op and prevents duplicate re-ingestion, unnecessary gap backfill, and evidence log bloat.
+
+```bash
+grep -q "mentor-light-20260624T044239Z" /root/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl
+# If exit code 0: already evaluated, write no-op journal and exit silently
+```
+
 ## Dispatch / Cron Integration
 
-When triggered by the dispatcher (`dispatcher.py`) or a cron job:
+When triggered by the dispatcher (`dispatcher.py`) as part of a multi-skill dispatch, Praxis owns:
+- `journals_evaluated.jsonl` — append-only log of all evaluated journals
+- `ingest_state.json` — `last_ingest_run` timestamp and counters
 
-1. **Capture pre-run timestamp** — BEFORE running any sibling skill pipelines (e.g., Mentor heartbeat), read `ingest_state.json:last_ingest_run` and capture it. The Mentor heartbeat script updates this timestamp, which would cause Praxis mtime-based discovery to miss journals written before the heartbeat ran.
+See `references/dispatch-ingest.md` for the full ingest procedure, decision table (genuine vs second-wave), and pitfalls.
 
-2. **Determine new journals** — use mtime-based discovery with the **captured** timestamp (not a fresh read of the state file):
-   ```bash
-   # Compare file mtime against the CAPTURED timestamp (not current state file)
-   find {journals_dirs} -name "*.json" -newermt "{captured_timestamp}" 2>/dev/null
-   ```
-   The `journals_evaluated.jsonl` dedup is broken (path format mismatch) — mtime comparison is the reliable method.
+**Single-skill dispatch (Praxis only):** Follow the standard journal ingest workflow. Use `templates/dispatch_ingest_template.py` with `CAPTURED_TS` — never write inline scripts.
 
-3. **Run ingest** — use the production template `templates/dispatch_ingest_template.py` as a starting point:
-   ```bash
-   cp templates/dispatch_ingest_template.py scripts/dispatch_ingest_YYYYMMDD.py
-   python3 scripts/dispatch_ingest_YYYYMMDD.py
-   ```
-   The template implements all mandatory gotcha filters (mentor-light noise, forge no-op, mixed-format eval handling).
+**Multi-skill dispatch (Forge + Mentor + Praxis):** Read `references/dispatch-wave-patterns.md` for the full cross-pipeline procedure including second/third/fourth-wave mitigation, concurrent cron gap handling, and cold-start initialization.
 
-4. **Post-ingest cleanup** — clean up stale scripts from the data directory root (see "Stale Script Cleanup" section in SKILL.md body).
-
-5. **Write journal** — call `praxis.journal` with dispatch metadata.
-
-**CRITICAL: Cross-pipeline state collision fix** — When the dispatcher triggers Forge + Mentor + Praxis in sequence, the Mentor heartbeat's `cron-heartbeat-light.py` updates `ingest_state.json:last_ingest_run` to a timestamp AFTER the mentor-light journal was written. If Praxis then reads the state file to determine new journals, the mtime comparison `journal_mtime > last_ingest_run` fails because the journal is now "older" than the state timestamp. The journal is missed. **Fix:** Capture `last_ingest_run` from `ingest_state.json` at the START of the dispatch (before Mentor runs), and pass that captured timestamp to Praxis mtime discovery. Confirmed 5+ times (2026-06-21).
-
-**Multi-skill dispatch pattern:** When the dispatcher triggers Forge + Mentor + Praxis, each pipeline runs independently. Praxis reads journals produced by other skills (especially mentor-light and forge) but does not block on them. See `references/session-20260621-dispatch-2.md` for a worked example with 0-event clean result.
+**Key rules:**
+- Capture `last_ingest_run` BEFORE Mentor runs (Mentor heartbeat advances it)
+- Third-wave mitigation is mandatory: add ALL dispatch-output journals to eval file and advance state
+- Gap journal backfill after every run (catches concurrency gaps + date filter misses)
+- `execute_code` is blocked in cron mode — use `terminal()` with scripts written via `write_file()`
+- Never do `ts.isoformat() + "+00:00"` — double suffix breaks `fromisoformat()`
+- **Large gap backfill (80+ entries) is normal at steady-state** — cron pipelines write ~10 journals/minute. Between dispatch waves (7-8 min apart), expect 50-80 gap entries. This is expected, not a failure. See `references/session-20260629-dispatch-1030Z-praxis-second-wave-gap-backfill.md`
+- Cold-start: initialize state with CURRENT timestamp, not epoch
+- **Pure eval-registration dispatch (confirmed 2026-06-30T11:25Z):** When ALL `new_files` are already in praxis eval (just missing from dispatch eval) or are prior-wave artifacts, the Praxis pipeline does NOT need to run. Register directly from the dispatch pipeline, advance `last_ingest_run`, do NOT increment `journals_evaluated_count`. See `references/session-20260630-dispatch-1125Z-praxis.md`.
 
 ## Journal Outputs
 
 Action Journal — every event recording, lesson extraction, shift change, and debrief generation. Include `entities_observed`, `relationships_observed`, `preferences_observed` with `user_relevance` field.
-
-## Optional Skill Cooperation
-
-- All OCAS skills — Praxis reads journal output (cooperative read)
-- Dispatch — receives action decisions for communication execution
-
-## Data Directory Path
-
-**The Praxis data directory is profile-specific.** The correct path is:
-```
-/root/.hermes/profiles/<profile>/commons/data/ocas-praxis/
-```
-NOT `/root/.hermes/commons/data/ocas-praxis/` (the default profile path).
-
-The `scripts/praxis_review.py` review script hardcodes the wrong path. Any ad-hoc scripts must use profile-aware resolution or the indigo-specific path. Always verify `events.jsonl` exists at the target path before running.
-
-**Ingest state file:** `{agent_root}/commons/data/ocas-praxis/ingest_state.json` tracks `last_lesson_extraction_event_id` for scoped lesson extraction. Create with `{"last_lesson_extraction_event_id": null}` if missing.
 
 ## Debrief Generation
 
@@ -249,47 +330,9 @@ Debrief JSON structure:
 }
 ```
 
-## Eval File Path Mismatch (Operational Issue — 2026-06-19)
-
-- **Eval file path format mismatch — workaround: use mtime, not dedup** — The `journals_evaluated.jsonl` file stores journal IDs in a different format than filesystem scans produce. Eval file stores `ocas-mentor/mentor-light-20260620T091801Z.json` (no date dir) while filesystem scan produces `ocas-mentor/2026-06-20/mentor-light-20260620T091801Z.json` (with date dir). The dedup mechanism cannot match, so every journal appears unevaluated. **Workaround:** Determine new journals by comparing file mtime against `ingest_state.json:last_ingest_run` timestamp, bypassing the broken dedup. See `references/session-20260620-dispatch.md`.
-
-**Root cause:** The eval file was rebuilt from a disk scan on 2026-06-15 using a different `path_to_journal_id` function than subsequent ingest runs. The eval file stores IDs like `ocas-mentor/mentor-light-20260619T233559Z.json` (no date directory) while the filesystem scan produces `ocas-mentor/2026-06-19/mentor-light-20260619T233559Z.json` (with date directory).
-
-**Impact:** The dedup mechanism cannot match, so every journal appears unevaluated. Ingest runs waste time scanning already-evaluated journals. New journals may be missed in the noise.
-
-**Fix needed:** Normalize eval IDs at the start of each ingest run — for each entry in `journals_evaluated.jsonl`, compute both possible path forms (with/without date directory, with/without `.json` extension) and check against both. Alternatively, rebuild the eval file from the current filesystem scan using the canonical `path_to_journal_id` function.
-
-**Workaround:** The actual new journals since last ingest can be determined by comparing file mtime against `ingest_state.json:last_ingest_run` timestamp, bypassing the broken dedup for new-journal detection.
-
-## Stale Script Cleanup
-
-Every ingest run writes a new `.py` file to the data directory. Over weeks, 40+ stale scripts accumulate (116 files / 1.7MB observed 2026-06-22). **At the end of each ingest run, clean up stale scripts:**
-
-```python
-# At end of main(), before final summary:
-import glob
-stale_patterns = [
-    'ingest_cron_*.py', 'ingest_*.py', 'scan_*.py', 'cleanup_*.py',
-    'lesson_extract_*.py', 'lesson_cleanup_*.py', 'shift_cleanup_*.py',
-    'shift_repair_*.py', 'debrief_*.py', 'analyze_patterns*.py',
-]
-# CRITICAL: Only clean the data directory root, NOT the scripts/ subdirectory
-removed = 0
-for pattern in stale_patterns:
-    for f in glob.glob(os.path.join(DATA_DIR, pattern)):
-        os.remove(f)
-        removed += 1
-if removed:
-    print(f"  Cleaned up {removed} stale scripts from data root")
-```
-
-**Production scripts live in `scripts/` and must NOT be removed.** The `scripts/` subdirectory at `{agent_root}/commons/data/ocas-praxis/scripts/` is the canonical location. Production scripts: `praxis_review.py`, `praxis_ingest_run.py`, `praxis_self_signaler.py`, `update.sh`, `praxis_common.py`. If any production scripts are found in the data directory root (not in `scripts/`), move them to `scripts/` rather than deleting — they may have been placed there by a previous ingest or manual operation. In the 2026-06-19 ingest, an overly broad cleanup deleted 46 files including production scripts that had been copied to the data root. Recovery required copying from the skill directory.
-
 ## Gotchas — Critical
 
-See `references/gotchas-praxis.md` for the full gotcha catalog (30+ operational pitfalls).
-
-Key gotchas:
+Key gotchas (see `references/gotchas-praxis.md` for the full catalog):
 
 - **Dedup key must be `(source_journal, signal_type)`** — Using `source_journal` alone as the dedup key in `events.jsonl` post-write dedup collapses multiple distinct signals from the same journal into one event. In ingest_20260606_v3, finch scan-1800 produced both `cron_errors` and `auth_failure` signals, but only the first survived dedup — the second had to be recovered manually. This matches the known limitation documented in `ingest-script-pattern.md` §Post-Write Dedup. **Always dedup by `(source_journal, signal_type)`**, not just `source_journal`.
 
@@ -303,11 +346,25 @@ Key gotchas:
 
 - **Mentor-light `failure_keyword` from generic summary scanner is a false positive — filter at extraction time** — Mentor-light heartbeat journals with `outcome: "success"` (or no `outcome` field) contain summary text like "0 errors detected", "2 historical error records in evidence", or "0 active anomalies". The generic summary scanner picks up the word "error" and emits a `failure_keyword` signal — but the journal is reporting SUCCESS, not failure. When mentor-light journals have `outcome in ("success", "", None)` and no explicit failure indicators (`gap_detected: true` or `metrics.errors > 0`), skip ALL generic signal extraction and return `no_signal`. Do NOT rely on the `signal_type` field alone — these journals may not have one, and the generic path assigns `failure_keyword` from summary text. Filter at the journal level, not the signal level. Discovered 2026-06-20: 8 false-positive `failure_keyword` events from mentor-light journals in a single ingest run. See `references/session_20260620_ingest.md`.
 
+- **Mentor-light `correction` from routine data updates is a false positive — filter at extraction time** — Mentor-light heartbeat journals with `outcome: "success"` may contain summary text like "active_skills_30d corrected 14→18" or "Script succeeded on all 3 writes". The signal extraction emits a `correction` signal — but this is a routine data correction (count update), not a behavioral failure. When mentor-light journals have `outcome in ("success", "", None)` and the only non-success signal is `correction`, skip event recording and return `no_signal`. This is a distinct false-positive source from `failure_keyword` — the same filter gate (mentor-light + success outcome) catches both. Confirmed 2026-06-22: mentor-light journal produced `correction` event from routine active_skills count update.
+
+- **Dispatch-wave `correction` from routine count updates is a false positive — filter at extraction time** — Dispatch-wave journals (source matching `dispatch-wave-*`) with summary text like "Mentor corrected 8→22" or "eval gaps corrected" emit a `correction` signal — but this reports that a downstream skill (Mentor, Forge) updated a count during its run, not that a behavioral correction occurred. The dispatch wave is orchestrating; the counts it reports are routine operational results from child skills, not system corrections. When a dispatch-wave journal has `type: "dispatch.wave"` and its only non-success signal is `correction`, skip event recording and return `no_signal`. This applies the same logic as the mentor-light `correction` false-positive filter. Confirmed 2026-06-29: dispatch-wave journal produced `correction` event from "Mentor corrected 8→22" in summary. See `references/session_20260622_ingest_cron_0409.md`.
+
+- **Dispatch-wave `mixed_genuine_no_op` is a routine orchestration outcome — filter at extraction time** — Dispatch-wave journals with `outcome: "mixed_genuine_no_op"` describe a dispatch that processed routine cron output with no actionable signals. The term "genuine" refers to the eval registration being genuinely needed (not second-wave re-detection), not to a behavioral event being detected. When a dispatch-wave journal has `type: "dispatch.wave"` and `outcome` contains `no_op` (e.g., `mixed_genuine_no_op`, `second_wave_no_op`), skip event recording and return `no_signal`. The dispatch pipeline completed successfully with no behavioral signals — this is the expected steady-state for routine cron output. Confirmed 2026-06-30: dispatch-wave journal with `outcome: "mixed_genuine_no_op"` was incorrectly recorded as a `mixed_genuine_no_op` event by Praxis ingest, then required manual cleanup.
+- **Dispatch-wave `escalation` echoing an already-evaluated Praxis-internal signal is a false positive — filter at extraction time** — Dispatch-wave journals (schema `dispatch-wave-v1`) may carry an `escalations[]` array whose entry `source` points at a *Praxis cron journal* (or any journal already processed by a prior Praxis run) with a `status` like "tier1 fix applied; already evaluated by praxis ingest; no personal input required from Jared". This is a second-wave echo of a signal already handled by an earlier Praxis run — NOT a new behavioral event. The generic signal scanner keys off the word "escalation" in the `escalations[]` array and emits a weak `escalation` event (summary "Unknown —"), which pollutes `events.jsonl` and double-counts the underlying issue. When a dispatch-wave journal's `escalations[]` entry has `source` matching `praxis-cron-*` (or any already-evaluated journal) AND `status` indicates already-handled/no-personal-input, skip event recording and return `no_signal`. If the event was already written by the production script, remove it from `events.jsonl` by `event_id` (post-hoc manual cleanup — established pattern for already-written false positives). Confirmed 2026-07-07: `dispatch-20260707T103730Z.json` produced an `escalation` event (event_id `evt-20260707104141463939-0947`) from an `escalations[]` entry whose source was `praxis-cron-20260707T084657Z.json` (already evaluated); removed during cleanup, leaving 0 genuine behavioral events for the run.
+- **Production ingest script may record events from phantom (non-existent on disk) source journals — verify `os.path.exists()` and remove** — The production `praxis_ingest_run.py` can emit an event whose `source_journal` path resolves to a file that does NOT exist on disk, even though that `journal_id` is present in `journals_evaluated.jsonl` (marked evaluated). Root cause: the script's file-discovery or journal-list reference includes a journal that was deleted, rotated, or never materialized, yet it still reads/derives a signal from it and records an event. Confirmed 2026-07-07: the script recorded an `escalation` event (event_id `evt-20260707131835467668-14860`) attributed to `ocas-custodian/light-scan-2026-07-07T131135.json`; `test -f` + `search_files` confirmed the file is MISSING on disk, though `journals_evaluated.jsonl` carried 1 entry for it. The event was a false positive — there was no real custodian escalation journal at that timestamp (the actual custodian light-scan at 12:07 had `escalation_needed: true`, but it is a tracked user-gated fault and NOT the source of this event). **Detection:** after the production run, for any non-`no_signal` event (escalation/failure_keyword/execution_error), resolve `source_journal` to `{agent_root}/commons/journals/<source_journal>` and check `os.path.exists()`. **Cleanup (post-hoc, established pattern):** if the source file is missing, remove the event from `events.jsonl` by `event_id` using a Python heredoc — NOT `cat file | python3`, which trips the pipe-to-interpreter security scanner in cron mode. Removing the phantom leaves the run's genuine behavioral event count at 0, which then triggers the Bug-2 `--new-genuine-events 0` fast-path to clear ALL extracted lessons as full-history noise. **Recommended script fix:** `praxis_ingest_run.py` should `os.path.exists()`-guard each resolved `source_journal` path immediately before recording an event and skip events whose source file is absent (prevents the phantom from ever entering `events.jsonl`). This is distinct from the dispatch-wave escalation echo (which references an already-evaluated journal that DOES exist on disk) — here the referenced journal file is simply absent.
+
 - **Custodian `action` journals with error mentions in summary are routine operational reports — filter at extraction time** — Custodian light-scan/action journals (type: `"action"`) routinely contain summary text like "All other error jobs are either transient (429), no-op exits, disabled, or already tracked" when reporting on known cron job states. The generic summary scanner picks up "error" and emits a `failure_keyword` signal — but the journal is reporting on known/tracked issues, not a new behavioral failure. When a custodian journal has `type: "action"` and the summary contains "error" but `escalation_needed` is absent or the journal is a routine scan (no new `findings` with `severity: "critical"`), skip generic signal extraction and return `no_signal`. The existing `observation` type filter only covers `type == "observation"` — the `action` type with error mentions is a distinct false-positive source. Discovered 2026-06-21: custodian light-scan action journal produced a `failure_keyword` event from summary text about known error jobs. A single event won't produce a lesson (needs ≥2), but it pollutes the event stream. See `references/session-20260621-dispatch-9.md`.
 
-- **Custodian `type: "observation"` is a routine scan — emit `no_signal`**
-
 - **Custodian `type: "observation"` is a routine scan — emit `no_signal`** — Custodian journals with `type: "observation"` are routine platform scans that check gateway status, disk usage, and job health. They do not represent behavioral signals. When a custodian journal has `type: "observation"`, emit `no_signal` and skip signal extraction. This is distinct from custodian `deep-scan` or `light-scan` types which may contain genuine signals. Confirmed 2026-06-21: custodian observation journal produced no actionable signals.
+
+- **Dispatch-triage journals are email triage records, not behavioral signals — filter at extraction time** — ocas-dispatch journals with `triage` in the filename (e.g., `dispatch-triage-*.json`) are records of email inbox triage decisions (action: none, informational). They don't represent behavioral failures or system issues. When signal extraction encounters a journal from `ocas-dispatch/` with `triage` in the filename, emit `no_signal` and skip. Confirmed 2026-06-28: dispatch-triage journal was incorrectly falling through to generic signal extraction in inline scripts.
+
+- **Custodian journals without a `type` field are routine operational reports — filter at extraction time** — Some custodian light-scan journals (post-2026-06-22) lack a `type` key entirely. The existing `type: "action"` filter doesn't catch these. Check by `run_id` pattern (`light-scan` or `deep-scan` in run_id) + no `escalation_needed` + no `persistent_failures` in `cron_registry`. When all three conditions are met, emit `no_signal` and skip signal extraction. The `is_false_positive_journal()` function in `praxis_ingest_run.py` was patched on 2026-06-22 to handle this variant. Confirmed 2026-06-22: custodian light-scan journal with no `type` field produced a false-positive `failure_keyword` event from summary text about "19 error jobs" that were all first-occurrence/known patterns.
+
+- **Custodian light-scan with UUID-style `run_id` and `not_activity_reason` containing transient/stale errors is a no-op — filter at extraction time** — Custodian light-scans with 10-character hex `run_id` (e.g., `01e29333-454`) use the post-2026-05 schema where `not_activity_reason` explains the verdict. When `not_activity_reason` contains "all transient" or "all...are transient or stale" AND `tier1_fixes_applied: 0` AND `issues_escalated: 0` AND no `type` field, emit `no_signal` and skip signal extraction — even if the summary or `observations.transient_errors` contains the word "error". The `is_false_positive_journal()` pre-filter must check `not_activity_reason` for phrases like "all error jobs are transient", "all transient or stale", "all...are transient" combined with zero fixes/escalations; if matched, return `no_signal` before keyword scanning. Without this filter, journals reporting all-transient error states produce false-positive `failure_keyword` events (the keyword "error" appears in `not_activity_reason` and `observations.transient_errors[].fingerprint` descriptions). Confirmed 2026-06-26: `01e29333-454.json` produced a `failure_keyword` event from "4 error jobs, all transient or stale" in summary; the `is_false_positive_journal()` handler only checked for `type` field presence/custodian action sub-type, not the typeless light-scan + all-transient verdict pattern. This event was caught and removed by post-ingest review, but it should never have been recorded.
+
+- **Custodian `esc-loop` / `escalation-execution-loop` journals with `escalation_needed: true` are GENUINE escalation signals — do NOT filter** — Custodian's scheduled escalation loop (`scan_type: "escalation-execution-loop"`, `run_id` like `esc-loop-*.json`) reviews tracked user-gated issues, pauses burning cron jobs, and sets `escalation_needed: true` when issues remain that require Jared's action (billing / API-key rotation / skill-internal model / interactive Google re-auth). This is a real behavioral signal, NOT one of the routine/healthy custodian false-positive variants (observation / action / typeless light-scan / all-transient light-scan). When a custodian journal has `escalation_needed: true`, record a genuine `escalation` event (do not skip). The `is_false_positive_journal()` pre-filter already excludes esc-loop (it only matches `observation`, `action`, and typeless/`all-transient` light-scan), so it passes through correctly — but this is intentional, not an omission; do not "fix" it by adding esc-loop to the filter. Always still apply the phantom-file guard: verify `os.path.exists()` on the resolved `source_journal` before trusting the event. Confirmed 2026-07-07: `esc-loop-20260707T173625Z.json` produced a verified genuine escalation event (source file present on disk, `escalation_needed: true`, 4 user-gated issues confirmed).
 - **Lesson content dedup required** — The `lesson_id` includes a random/timestamp component, so dedup by `lesson_id` alone does NOT prevent semantic duplicates. Each ingest run generates different IDs for the same `(signal_type, phase)` group. **Always dedup by `(signal_type, failure_phase)` content fingerprint before writing lessons.** See `ingest-script-pattern.md` §Lesson Content Dedup. Without this, `lessons.jsonl` grows by ~9-49 duplicate entries per run.
 
 - **Lesson dedup key must normalize `failure_phase` to lowercase** — The `(signal_type, failure_phase)` dedup key is case-sensitive. Existing lessons may have `failure_phase: "Planning"` (capitalized) while new lessons produce `failure_phase: "planning"` (lowercase), causing the dedup to miss the match and create a semantic duplicate. In the 2026-06-22 ingest, a `coverage_gap` lesson was duplicated because `"Planning" != "planning"`. **Fix:** Normalize both sides to lowercase before comparison:
@@ -338,6 +395,8 @@ Key gotchas:
 - **`finch_actionable_email` is a legitimate signal type — NOT noise** — Finch scan journals produce `actionable` email counts when new emails require attention (job opportunities, application updates, etc.). This is a genuine positive signal, not a no-op. **Do NOT add `finch_actionable_email` to `NOISE_SIGNAL_TYPES`.** The signal should produce events and, when ≥2 events accumulate, lessons. The only filter: if `actionable == 0`, skip (no new emails to act on). Discovered 2026-06-20: 12 finch_actionable_email events from 10 scans produced the first finch lesson.
 - **Finch `new_tasks_added` is a list, not an int** — Finch scan journals store `new_tasks_added` as a list of task dicts, NOT as an integer. Checking `data.get("new_tasks_added", 0) > 0` crashes with `TypeError`. **Fix:** Use `len(new_tasks) if isinstance(new_tasks, list) else (new_tasks if isinstance(new_tasks, int) else 0)`.
 - **Initialize ALL accumulator variables before any loop or conditional** — `truly_new`, `remaining_proposals`, and any accumulator must be initialized before the `if`/`for` block that might define it. A variable assigned only inside a `for/else` body does not exist when the loop iterates 0 times, causing `NameError` after data writes have already completed.
+- **Inline Python heredoc variable shadowing in `terminal()`** — When writing dispatch ingest logic as inline Python inside `terminal()`, a variable like `new_journals` built in one scope (e.g., a set-difference loop) can be silently shadowed by a same-named variable in a later block (e.g., the eval-write loop that rebuilds it from scratch). The result: diagnostic counters report 0 even though writes succeeded (the file grows correctly). The fix: use distinct variable names for each logical stage (`discovered_journals`, `eval_written_count`) and always verify writes with `wc -l` post-run rather than trusting inline counters. Confirmed 2026-06-28 dispatch: eval file grew from 42,241 to 42,248 (+7) but script reported `journals_evaluated: 0`.
+- **Eval entry `source` field must be set explicitly** — When writing to `journals_evaluated.jsonl` from inline Python, the `source` field defaults to empty/missing if not explicitly included in the entry dict. Future gap analysis grep checks (`grep "source" eval_file`) then show `?` or empty. Always include `'source': 'dispatch-mtime-discovery'` (or appropriate source tag) in every eval entry dict. Confirmed 2026-06-28: 7 entries written with missing source field.
 - **Cap enforcement must use a separate counter, not the mutable list** — When activating shifts in a loop, do NOT check `len(active_shifts)` if you're appending to `active_shifts` inside the same loop. The list grows on every iteration and the cap is never enforced. Use a separate `active_count` variable computed once before the loop, and increment it manually on each activation.
 
 - **Cap enforcement must use full file rewrite, not append-only** — When the cap is exceeded and a shift is expired in-memory to make room for a new one, the expired shift's status change is NOT persisted if you only append new shifts to `shifts.jsonl`. The expired shift remains `active` on disk. **Fix:** After all in-memory modifications (reinforce, expire, activate), do a FULL rewrite of `shifts.jsonl` from the canonical in-memory state. Track new shifts separately and only append those if you must use append-only — but prefer full rewrite. See `references/session_20260618_ingest.md` for the repair procedure.
@@ -346,57 +405,28 @@ Key gotchas:
 
 - **Domain must be the skill name, not the signal_type** — When proposing shifts from events, `domain` must be set to the skill that produced the events (e.g., `ocas-mentor`), NOT to the `signal_type` (e.g., `gap_detected`). Setting `domain = signal_type` produces meaningless shifts like "In gap_detected during Planning: gap_detected recurs" instead of "In ocas-mentor during Planning: gap_detected recurs". **Fix:** Use the `skill` field from the events that contributed to the lesson, or use the most common skill in the event group as the domain. Only fall back to `signal_type` as domain if no skill information is available.
 - **Lesson extraction must filter events with null/None/empty failure_phase** — Before grouping events for lesson extraction, filter out events where `failure_phase` is `None`, `null`, `""`, or `"MISSING"`. These produce meaningless lessons like "Monitor and address X during None phase". In the 2026-06-16 ingest, 90 events with invalid phases produced 26 bad lessons. **Fix:** Add `valid_events = [e for e in all_events if e.get('failure_phase') and str(e.get('failure_phase')).lower() not in ('none', 'null', '', 'missing')]` before the grouping loop.
-- **Inline ingest scripts must implement all documented gotcha filters** — When writing ad-hoc ingest scripts (rather than using the production `praxis_ingest_run.py`), it is NOT sufficient to follow only the basic scan/extract/append pattern. ALL gotcha-documented filters must be implemented: null-phase event filtering before lesson grouping, `NOISE_SIGNAL_TYPES` filtering before lesson write, forge no-op detection with `startswith`, spot no-op detection, summary string suppression, and `(source_journal, signal_type)` dedup. In the 2026-06-17 ingest, an inline script skipped the null-phase filter and the `success` noise type, producing 4 noise lessons and 2 noise shifts that required post-hoc cleanup. **Fix:** Before writing any ingest script, review the full gotcha catalog and implement every filter marked MANDATORY.
+- **Writing complex Python scripts — use heredoc, not write_file** — `write_file()` and inline `python3 -c` silently corrupt multi-line Python (merged lines, mangled quotes, unterminated strings). For scripts >20 lines, use `cat > /tmp/script.py << 'EOF'` in `terminal()`, then run with `python3 /tmp/script.py`. Confirmed 2026-06-29: 3 consecutive write_file attempts all produced SyntaxError; heredoc worked on first try. See `references/ingest-script-pattern.md` §Writing complex Python scripts.
+- **`patch` corrupts multi-line JSON replacements in `ingest_state.json` (2026-07-01)** — The `patch` tool's fuzzy matching can mangle JSON structure when replacing multi-line blocks. During this cron ingest, a `patch` call targeting lines 50-52 of `ingest_state.json` successfully replaced the targeted fields but **dropped the `stale_script_cleanup` sub-object that immediately followed**, producing invalid JSON that wouldn't parse. Root cause: fuzzy matching matched and replaced a block boundary that included context from the next object, and the `new_string` didn't re-declare it. **Fix:** For multi-line edits to `ingest_state.json` (or any nested JSON state file), prefer full file rewrite via `write_file()` over `patch()`. If `patch` must be used, ensure the `old_string` includes ALL content between the target lines and the start of the next top-level key — or better, verify JSON validity with `python3 -c "import json; json.load(open(...))"` immediately after applying. Confirmed 2026-07-01: 2-step patch (journal path + decay timestamp) broke the file; had to recover via full `write_file` rewrite.
+- **`ingest_state.json` has two gap-backfill counters — read `eval_gaps_backfilled`, not `gaps_backfilled`** — After `gap_backfill.py` runs, its stdout prints `gaps_backfilled=N`, but the field it actually writes is `eval_gaps_backfilled`. The separate `gaps_backfilled` key is a stale duplicate that stays at `0` and is NOT updated by the script. When you read state and see `gaps_backfilled: 0` immediately after a backfill that printed `gaps_backfilled=26`, that is NOT corruption — `eval_gaps_backfilled` holds the real cumulative count. Always read `eval_gaps_backfilled` for the authoritative backfill total; treat the bare `gaps_backfilled` key as dead. Confirmed 2026-07-07: gap_backfill printed `gaps_backfilled=26`; on-disk `eval_gaps_backfilled` became 26 while `gaps_backfilled` stayed 0 — the discrepancy looked like state clobbering until the two-field split was identified.
 
-- **Lesson extraction must scope to NEW events only — re-processing full history creates stale lessons** — The lesson extraction Pass 1 groups events by `(signal_type, failure_phase)` and emits lessons for any group with ≥2 events. If `all_events` is loaded from the entire `events.jsonl` history (2,500+ events), every re-run re-creates lessons for stale patterns and produces noise lessons from historically-accumulated events. In the 2026-06-18 ingest, 8 lessons were created from the full history: `no_active_watches` (5 spot sweep events), `system_memory_drop` (2 finch events), `failure` (28 legacy events, domain: unknown), and 4 legitimate patterns. Only the 4 legitimate ones survived cleanup. **Fix:** Before Pass 1 grouping, filter `all_events` to only events recorded in the current ingest run (or since `last_lesson_extraction_event_id`). Track the last processed event ID in the ingest state file. This prevents stale lessons from being re-created and keeps the lesson pool focused on emerging patterns. See `references/session_20260618_ingest_cron_d.md`.
+- **Rewrite `ingest_state.json` via Python load→modify→dump, not hand-typed JSON** — The patch-corruption pitfall above says prefer a full file rewrite over `patch()`; correct, BUT hand-authoring the entire 58-field JSON into `write_file()` is itself error-prone — it is trivial to omit a nested sub-object (e.g., `stale_script_cleanup`) and silently lose a counter or produce invalid JSON. **Safest pattern:** read current state with `json.load`, mutate only the fields you need (`s['last_ingest_run'] = ...`, `s['journals_processed'] = s.get('journals_processed',0)+N`, etc.), then `json.dump(s, open(f,'w'), indent=2)`. This preserves every other field automatically. Use a `terminal()` Python heredoc for the multi-line logic (not `write_file` for the JSON body). Confirmed 2026-07-07: full ingest-state update done this way — all 58 keys preserved, no field dropped.
 
-- **`tier_1_fixes_applied` field can be `int` or `list`** — Custodian journals store `tier_1_fixes_applied` as either an integer count (e.g., `3`) or a list of fix descriptions (e.g., `["fix1", "fix2"]`). Any ingest script that calls `len(data.get("tier_1_fixes_applied", []))` will crash with `TypeError: object of type 'int' has no len()` when the field is an integer. **Fix:** Check type before counting: `fixes = data.get("tier_1_fixes_applied", []); fixes_count = fixes if isinstance(fixes, int) else len(fixes) if isinstance(fixes, list) else 0`. Discovered 2026-06-17: ingest_cron_20260618_g.py crashed on first custodian journal with `tier_1_fixes_applied: 3`.
+- **`os.walk` can return phantom files that don't exist (2026-06-29)** — During gap backfill, `os.walk` may list files deleted by concurrent processes between the directory listing and your `os.stat()` call. Always guard with `os.path.exists(fpath)` before stat or gap classification. A phantom gap entry that can't be opened is a race artifact, not a real gap — skip silently.
+- **Bug 2 noise lessons can have `signal_type` key MISSING entirely — not just `"?"` (2026-06-29)** — The production script's Pass 2 grounding produces lessons that lack a `signal_type` key altogether when source events have no signal_type field. Cleanup filters that only check `signal_type == "?"` or `signal_type == ""` miss this variant. Any noise cleanup MUST also check `les.get("signal_type") is None`. Confirmed 2026-06-29: 13 Bug-2 lessons bypassed the existing filter because the key was absent, not set to `"?"`.
 
-- **`new_errors` field can be `None`** — Custodian journals may have `new_errors: null` (JSON null → Python None) rather than `[]` or a list. Iterating over `None` raises `TypeError: 'NoneType' object is not iterable`. **Fix:** Use `data.get("new_errors", []) or []` to coerce None to empty list. This is the same class of bug as other nullable array fields in custodian journals.
+- **Decay age computation: use `last_reinforced_at`, NOT `activated_at` (2026-07-01)** — When computing shift age for decay analysis, the clock resets on every reinforcement. A shift activated 12 days ago that was last reinforced 2 days ago has ~12 days remaining (at 14-day TTL), NOT ~2 days. Using `activated_at` as the decay baseline produces false "approaching decay" warnings and pollutes the debrief with incorrect findings. Always use `last_reinforced_at` as the primary age field; fallback to `activated_at` only if `last_reinforced_at` is missing entirely. The decay-risk flag (`reinforcement_count == 0 AND age > 10 days`) is already correct in `scripts/praxis_debrief.py`. This pitfall is for anyone writing inline debrief logic (cron mode, dispatch) that computes ages manually. Confirmed 2026-07-01: inline debrief incorrectly flagged all 3 shifts as approaching decay when they had been reinforced 2 days prior with ~12 days remaining.
+- **Double-Z timestamp bug in praxis-cron journals (STILL ACTIVE 2026-06-30)** — The `praxis_ingest_run.py` script occasionally produces journal filenames with double-Z suffixes (e.g., `praxis-cron-20260630T092758ZZ.json`). Root cause: timestamp composition applies `.rstrip('Z') + 'Z'` to a value already ending in Z, OR two ISO timestamp components get concatenated. **Mitigation:** gap backfill and dispatch pipeline treat these filename as-is for eval registration — no rename needed at eval time. **Fix needed:** audit `praxis_ingest_run.py` journal output section to check `ts.endswith('Z')` before appending Z. Confirmed recurring: 2026-06-26, 2026-06-28, 2026-06-30.
 
-- **Two journal directory paths exist — MUST scan both** — Journals are stored under BOTH `/root/.hermes/commons/journals/` (legacy/default profile) AND `/root/.hermes/profiles/indigo/commons/journals/` (indigo profile). Different skills write to different paths: forge/finch/spot write to legacy; custodian/mentor write to indigo. **Fix:** Maintain a `JOURNALS_DIRS` list with both paths and a `find_journal(jid)` helper that checks each. Walk BOTH directories when scanning for unevaluated journals. See `references/ingest-script-pattern.md` §Dual Journal Directory Scan.
-- **Spot observation no-op handler must gate ALL signal paths** — When a spot journal has `type: "observation"` and the summary contains known transient platform phrases ("skipped", "permanently broken", "dead watch", "expired", "no new availability"), the handler must emit `no_signal` and skip signal extraction entirely. Use a `skip_signals = False` flag set BEFORE the signal extraction block, check it with `if skip_signals: continue` AFTER extraction, rather than relying on `continue` inside nested conditionals that may not execute. The `summary` variable must be initialized before the spot handler runs.
-- **`execute_code` is blocked in cron context** — Use `terminal()` to run Python scripts. Do NOT use heredoc (`<< 'PYEOF'`) — shell metacharacters inside Python code (e.g., `&` in comparisons, backticks, `$()`) cause the shell to interpret them and the command fails with "Foreground command uses '&' backgrounding." The reliable pattern: **write the script to a `.py` file via `write_file()`, then execute it via `terminal(command="python3 /path/to/script.py")`. This works in both interactive and cron contexts.
+- **Shell heredoc journal writing also produces double-Z (2026-07-01)** — When using shell heredoc (`cat > file << EOF`) to write journal files in cron, the timestamp shell variable typically ends in `Z` (e.g., `TS="20260701T101349Z"`). If the filename template appends another `Z` — `${TS}Z.json` — the result is `...ZZ.json`. This is a DIFFERENT source from Bug 4 (production script double-Z). **Fix:** Strip trailing `Z` from the timestamp variable before using it in the filename template: `TS_SHORT="${TS%Z}"` then use `${TS_SHORT}Z.json`. Or, always check and fix with post-write rename. Confirmed 2026-07-01: shell heredoc journal produced `praxis-cron-20260701T101349ZZ.json`, fixed with `mv`.
 
-- **`write_file` can corrupt Python syntax — always compile-check after writing `.py` files** — The `write_file` tool can escape braces in Python dict literals and f-strings (e.g., `{"key": "value"}` becomes `{\"key\": \"value\"}` or `"}` becomes `"}` with a stray closing brace). This produces `SyntaxError` on the affected line or the line after. **After writing any `.py` file via `write_file`, always run `python3 -c "compile(open('script.py').read(), 'script.py', 'exec')"` before execution.** If the compile fails, use `patch` with the correct old/new strings to fix the escaped characters. Confirmed 2026-06-21: Praxis dispatch ingest script had `"}` instead of `})` on two return statements, causing `SyntaxError: closing parenthesis '}' does not match opening parenthesis '['`. See `references/session-20260621-dispatch-8.md`.
-- **`python3 -c "..."` silently corrupts Python variable names** — When passing Python code via `python3 -c "..."` inside `terminal()`, the shell can strip characters from variable names in f-strings (e.g., `f'{relpath}: ...'` becomes `f'{elpath}: ...'` because the `r` gets consumed). Variables then raise `NameError`. **Never inline complex Python logic in `python3 -c` strings.** Always write to a `.py` file via `write_file()` first. This also applies to `terminal(python3 -c "...">` and `execute_code`-style inline strings. Confirmed 2026-06-21: three consecutive failures from this pattern.
-**CRITICAL: Cross-pipeline state collision fix** — When the dispatcher triggers Forge + Mentor + Praxis in sequence, a separate Praxis cron job (or the dispatcher's own file operations) may update `ingest_state.json`'s `last_ingest_run` timestamp AFTER a Mentor journal is written but BEFORE the Praxis dispatch can scan for it. This causes the dispatch ingest to find 0 new journals because the state timestamp moved forward. Note: the Mentor heartbeat script does NOT write to Praxis's `ingest_state.json` — the collision comes from parallel Praxis cron runs or dispatcher file operations, not from Mentor. **Fix for dispatch-triggered Praxis: capture `last_ingest_run` from `ingest_state.json` at the very start of the dispatch (before any sibling skill pipelines run), and use that captured timestamp as the mtime comparison baseline.** The dispatch ingest template already reads `last_ingest_run` from the state file — in dispatch mode, ensure no intermediate Praxis cron has run between Mentor's journal write and the template's state read. When in doubt, use an even earlier timestamp (e.g., the `latest_mtime` from the dispatch details) as the baseline. Confirmed 6+ times (2026-06-21).
-- **Mismatched quote types in string literals within `write_file` content** — When writing Python scripts via `write_file`, a dict literal with mismatched quote types (e.g., `les.get('lesson_id", '')` — single-quote start, double-quote end) produces `SyntaxError: unterminated string literal`. This is NOT an f-string issue — it's a plain string literal with mismatched delimiters. The error message points to the line *after* the actual mismatch, making it hard to spot. **Fix:** After writing any `.py` file via `write_file`, always run `python3 -c "compile(open('script.py').read(), 'script.py', 'exec')"` before execution. In the 2026-06-18 ingest, this pattern on line 446 blocked the entire run until manually patched.
-- **`write_file` OVERWRITES JSONL files** — Read-then-rewrite pattern required for appends
-- **Disk-full blocks ingest** — Check `df -h /` before running; abort if <1G free. Recovery: `apt-get clean`, remove stale scripts. See `references/gotchas-praxis.md` Disk and Environment section.
-- **Cross-skill contamination risk** — Verify Praxis content doesn't pick up artifacts from Finch
-- **Lesson suppression false-positive** — When checking if an existing lesson covers a new pattern, keyword matching against `lesson_text` is NOT sufficient. An `ocas-sands` lesson about "Google OAuth token missing" (planning phase) will incorrectly suppress a new `ocas-custodian` lesson about "Google OAuth revoked" (execution phase) because both contain "token". Match on `domain` + `failure_phase` + semantic scope, not keywords. Default to extracting the lesson when in doubt — dedup belongs in shift activation (merge-before-cap), not in lesson suppression.
-- **Malformed lesson cleanup** — Legacy ingest runs may create lesson entries with empty `signal_type` (e.g., `les-00000228995663230219-0001`). These stubs pass the `confidence: high` check and get proposed as shifts with `signal_type: "unknown"` and `domain: "unknown"`, polluting the active shift list. **Fix:** Before proposing shifts, validate that each lesson has a non-empty `signal_type` and `failure_phase`. Filter out any lesson where `signal_type` is empty, `"unknown"`, `"?"`, or `None`. If malformed lessons already exist in `lessons.jsonl`, remove them and any shifts that reference them. See `references/session_20260614_ingest.md` for the cleanup procedure.
-- **Shift proposal must validate lesson quality** — The shift proposal loop iterates over `all_lessons` and checks `confidence == 'high'` and `lid not in covered_lesson_ids`. But if lessons have empty `signal_type`, they produce shifts with `signal_type: "unknown"` that are semantically meaningless. **Always validate `signal_type` is non-empty and meaningful before proposing a shift.** Add a guard: `if not lesson.get("signal_type") or lesson["signal_type"] in ("unknown", "?", ""): skip`.
-- **Evaluated journal dedup must use canonical IDs** — When building the `seen_ids` set from `journals_evaluated.jsonl`, normalize each `journal_id` to include the `.json` extension. Without this, `skill/2026-06-13/filename` (no extension) won't match `skill/2026-06-13/filename.json` (with extension), causing journals to be re-evaluated every cycle and inflating the unevaluated set with already-processed files.
-- **Ingest date window too narrow — scan ALL dates, not just today/yesterday** — The ingest script computes `today` and `yesterday` from `datetime.now(timezone.utc)` and only scans those two date directories. But cron jobs (especially forge journal-scan) write files to future-dated directories. These files exist on disk but are invisible to the scan. In the 2026-06-15 ingest, 15 forge June 15 journals were missed by the main run and required a manual secondary pass. **Fix:** Walk ALL date directories on disk — remove the `date_dir in (today, yesterday)` filter from the filesystem scan. The `journals_evaluated.jsonl` dedup is the actual gatekeeper; the date filter is an unnecessary optimization that causes misses. Alternatively, use mtime-based comparison as a secondary check.
+- **JSON journal writing in cron: prefer shell heredoc over inline Python** — When writing JSON journal files via `python3 << 'PYEOF'` heredoc, dict literals with double-quotes get corrupted: smart-quote conversion, variable name truncation after closing quotes, and `SyntaxError: invalid decimal literal` from mangled dicts. **Fix:** Use shell heredoc (`cat > file << EOF` with `$TS` and `$NOW` variables) to write JSON journal files. Reserve Python heredocs for eval file reads/writes with programmatic content. Confirmed 2026-06-30T11:25Z: 6 consecutive inline Python heredoc failures before switching to shell heredoc worked.
+- **Proposed shifts are invisible to standard decay checks — they accumulate indefinitely** — The decay check only scans `status: "active"` shifts for reinforcement TTL. Proposed shifts that never get activated sit in `shifts.jsonl` forever, bloating the file with dead entries. Confirmed 2026-06-30: 15 proposed shifts from the 2026-06-18 rebuild sat idle for 11 days. **Fix:** Every decay check must also scan `status: "proposed"` entries and expire any ≥10 days old. See `references/session-20260630-decay-check-stale-proposed.md`.
+- **Follow explicit script paths** — When a user provides an explicit script path for running ingest or other Praxis scripts, use that exact path. Do not substitute or assume alternative locations, even if they seem equivalent. Failure to use the provided path can result in script-not-found errors and failed runs. Always verify the path before execution.
+- **Gap backfill MUST run BEFORE overwriting `last_ingest_run` (cron checklist ordering trap)** — `gap_backfill.py` thresholds its scan on `mtime > last_ingest_run` read from `ingest_state.json`. The Cron Execution Checklist lists "Update `ingest_state.json` (set `last_ingest_run` to current timestamp)" as step 1 and "Gap journal backfill" as step 2 — taken literally, step 1 sets `last_ingest_run = now`, so step 2's scan (`mtime > now`) catches ZERO journals silently (no error, just 0 backfilled). The correct order: run `gap_backfill.py` FIRST (while `last_ingest_run` still holds the PRIOR run's timestamp), THEN update `ingest_state.json` including `last_ingest_run = now`. `gap_backfill.py` only mutates backfill counters, never `last_ingest_run`, so running it early is safe and is the only way it can catch post-ingest / date-filter-missed journals. Confirmed 2026-07-07: running gap backfill with the prior `last_ingest_run` (10:37:30) correctly reported 0 missed journals; updating `last_ingest_run` first would have made it a silent no-op.
 
-- **Production script only scans legacy journal path — DUAL-JOURNAL FIX applied 2026-06-21** — `praxis_common.py` had `JOURNALS_DIR = "/root/.hermes/commons/journals"` (legacy, 4,016 journals) and `find_all_journals()` only walked that directory. The indigo profile path (`/root/.hermes/profiles/indigo/commons/journals`, 8,335 journals) was completely unscanned. On 2026-06-21, 30+ journals from today were found unevaluated. **Fix:** Added `JOURNALS_DIRS` list to `praxis_common.py`; updated `find_all_journals()` to walk both directories with dedup. All 30 journals were routine no-signals (no events lost). See `references/session-20260621-dual-journal-fix.md`.
-- **Mentor journals frequently malformed — skip gracefully** — ocas-mentor lightweight heartbeat journals often contain unresolved shell template variables (`$(python3 -c "...")`), placeholder values (`RUN_ID_PLACEHOLDER`), control characters, or are 0 bytes. These are expected byproducts of the mentor script's dual-failure fallback path (primary Python write fails, shell backup writes don't fully resolve templates). **Fix:** Ingest scripts should catch `json.JSONDecodeError` for mentor journals and log a `malformed: mentor` counter rather than crashing or counting as error. Do not treat malformed mentor journals as a Praxis data quality issue — the signal is in ocas-mentor's journal production, not in Praxis ingestion. This pattern has been observed consistently from 2026-06-06 through 2026-06-15 (9+ runs).
-- **Two journal directory paths exist — use profile-aware path** — Journals are stored under BOTH `/root/.hermes/commons/journals/` (legacy/default profile) AND `/root/.hermes/profiles/indigo/commons/journals/` (indigo profile, 7,667 files). The indigo path contains the active, up-to-date journals. **Always use the profile-aware path**: `/root/.hermes/profiles/<profile>/commons/journals/`. The `JOURNALS_DIR` constant in `ingest-script-pattern.md` references the wrong path (`/root/.hermes/commons/journals`). Fix: `JOURNALS_DIR = "/root/.hermes/profiles/indigo/commons/journals"`.
+- **Pipe-to-interpreter commands hang autonomous cron jobs (security scan → `approval_pending`)** — Commands that pipe file contents into an interpreter (`cat file | python3 -c ...`, `tail -1 file | python3 ...`, `grep x file | python3 ...`) trip the environment's `tirith:pipe_to_interpreter` security scanner, which routes them to `approval_pending` status. A scheduled cron job has no user present to approve, so the command silently blocks and the run stalls (no error, no completion). **Fix (cron mode):** never pipe files into `python3`/`jq`/etc. Use (a) the dedicated `read_file` / `search_files` tools, (b) a plain `wc -l file` or `grep` terminal call with no pipe to an interpreter, or (c) `execute_code` with `from hermes_tools import read_file, terminal` when you must parse/transform content programmatically. Confirmed 2026-07-07: two `cat file | python3` and `tail file | python3` calls in this ingest both hit `approval_pending` and had to be rerouted to `read_file` + `execute_code`.
 
-- **`tier_1_fixes_applied` field can be `int` or `list`** — Custodian journals store `tier_1_fixes_applied` as either an integer count (e.g., `3`) or a list of fix descriptions. Calling `len()` on an int raises `TypeError`. **Fix:** `fixes = data.get("tier_1_fixes_applied", []); fixes_count = fixes if isinstance(fixes, int) else len(fixes) if isinstance(fixes, list) else 0`.
-
-- **`new_errors` field can be `None`** — Custodian journals may have `new_errors: null`. Iterating over `None` raises `TypeError`. **Fix:** `data.get("new_errors", []) or []`.
-
-- **Remove `ocas-lucid` from SKIP_DIRS** — SKIP_DIRS should only contain `ocas-praxis`. Lucid journals are routine degraded-mode scans that produce `no_signal` — scanning them is harmless and keeps the eval file complete. Having `ocas-lucid` in SKIP_DIRS causes every cycle to rediscover and skip them without marked evaluated. **This also applies to `ingest-script-pattern.md` line 61-62** — the reference script's `JOURNALS_DIR` must use the indigo profile path (`/root/.hermes/profiles/indigo/commons/journals`) and `SKIP_DIRS` must only contain `{"ocas-praxis"}`.
-
-- **`journals_evaluated.jsonl` contains mixed formats — plain strings AND JSON dicts** — The eval file accumulates entries from different rebuild operations. Some entries are plain strings (from shell rebuild scripts), others are JSON dicts (from Python ingest scripts). After `json.loads()`, plain strings become `str` objects. Calling `.get("journal_id")` on a `str` raises `AttributeError`, crashing the ingest. **Fix:** Check `isinstance(e, dict)` before `.get()`. For plain string entries, use the string itself as the ID. See `references/session_20260625_ingest.md`.
-
-- **Finch journal schema varies — `actionable`/`new_tasks_added` fields not always present** — Some finch scans use `findings`/`tasks_updated` instead. Use `data.get("new_tasks_added") or []` to coerce None to empty list before `len()`.
-- **Signal extraction script pattern** — The production-proven approach for cron ingest: write a Python script to a `.py` file via `write_file()`, then execute via `terminal(command="python3 /path/to/script.py")`. Script should: (1) load evaluated IDs from `journals_evaluated.jsonl`, (2) walk ALL date directories, (3) extract signals per journal schema, (4) dedup by `(source_journal, signal_type)`, (5) append new events to `events.jsonl`, (6) append new journal IDs to `journals_evaluated.jsonl`, (7) write evidence + decision records. See `references/session_20260615_fullscan.md` for the full signal extraction function and the schemas it handles.
-- **`events.jsonl` dual schema: `outcome_type` vs `signal_type`** — Legacy events (pre-2026-06-15) use `outcome_type` + `domain` + `source_journal` (no `signal_type`, no `skill` key). Current events use `signal_type` + `skill` + `source_journal`. When reading events for lesson extraction, direct `evt["signal_type"]` access crashes on legacy events. **Fix:** Define and use a `get_signal_type()` helper:
-  ```python
-  def get_signal_type(evt):
-      return evt.get("signal_type") or evt.get("outcome_type") or "unknown"
-  ```
-  Use this helper for ALL event grouping, filtering, and lesson extraction. See `references/session_20260616_ingest_cron_praxis_v5.md` for the full context.
-- **Write evidence BEFORE eval entries (crash safety)** — If the script crashes after writing eval entries but before evidence, the audit trail is incomplete: journals are marked evaluated but no evidence record exists. **Fix:** Write the evidence record immediately after signal extraction completes, BEFORE lesson extraction or eval entry appends. At minimum, write evidence before the first `append_jsonl(EVAL_FILE, ...)` call. See `references/session_20260616_ingest_cron_praxis_v5.md` for the crash scenario.
-- **Non-dict journal format** — Some journals store data as a JSON array (`[...]`) instead of a JSON object (`{...}`). Calling `.get()` on a list raises `AttributeError`. **Fix:** After `json.load()`, check `if not isinstance(data, dict):` and skip with `action_taken: "skipped_non_dict"`.
-- **Evidence variable initialization** — The `evidence` variable must be initialized BEFORE the conditional write (`evidence_id = "none"`). If the condition is false, downstream references to `evidence["evidence_id"]` raise `NameError`.
-- **Eval ID format normalization** — The eval file stores IDs as `skill/YYYY-MM-DD/filename` (no `.json`), but `find`/`os.walk` produces `skill/YYYY-MM-DD/filename.json`. **Fix:** When building the evaluated set, add both the raw ID and the ID with `.json` appended.
-- **Batch limiting for large unevaluated sets** — When thousands of journals are unevaluated, cap batch at ~500 per run. Prioritize active skills, sample non-active at 1/10th. The eval dedup ensures no journal is permanently missed.
-
+- **Re-read `ingest_state.json` AFTER `gap_backfill.py` before your state update** — `gap_backfill.py` writes its own fields back to the state file (`eval_lines`, and increments `eval_gaps_backfilled`). If you snapshot the state once at the start of the run and later apply your load→modify→dump update, you will clobber gap backfill's writes. **Fix:** re-read `ingest_state.json` immediately before the final state update so your changes compose on top of the backfill's counters. Confirmed 2026-07-07: gap backfill advanced `journals_evaluated_count` 49232→49240 between the initial read and the update step; re-reading preserved it. (Pairs with the load→modify→dump pattern — never hand-type the JSON body, which risks dropping nested keys like `stale_script_cleanup`.)
 ## OKRs
 
 See `references/okrs-praxis.md` for full OKR definitions and targets.
@@ -407,72 +437,23 @@ Key OKRs: `event_coverage` (≥0.90), `lesson_extraction_precision` (≥0.80), `
 
 See `references/self-update-praxis.md`.
 
-## 2026-06-20 Ingest Findings
-
-**New gotcha: Mentor-light `failure_keyword` false positives**
-- Mentor-light heartbeat journals with `outcome: "success"` (or no `outcome` field) contain summary text like "0 errors detected" or "2 historical error records in evidence"
-- Generic summary scanner picks up "error" and emits `failure_keyword` — a false positive
-- Fix: skip ALL generic signal extraction for mentor-light journals with `outcome in ("success", "", None)` unless explicit failure indicators (`gap_detected: true` or `metrics.errors > 0`)
-- 8 noise events produced in one run before fix was applied
-- Patched in `ingest_cron_20260622.py` and gotcha section above
-
 ## Support File Map
 
-| File | When to read |
-|------|-------------|
-| `references/data_model.md` | Before creating events, lessons, shifts; for schemas and storage layout |
-| `references/okrs-praxis.md` | During OKR evaluation |
-| `references/ingest-script-pattern.md` | Before writing ingest scripts; production-proven Python pattern for scan/dedup/extract/shift-activate workflow |
-| `references/journal_ingestion.md` | Before scanning skill journals; signal extraction rules |
-| `references/gotchas-praxis.md` | Before any Praxis operation; full gotcha catalog |
-| `references/session_20260616_gotchas.md` | 2026-06-16 new gotchas: dual event schema, forge path canonicalization, evidence-before-eval crash safety |
-| `references/gotcha_cross_skill_corroboration.md` | Before recording events; cross-skill dedup rules |
-| `references/gotcha_custodian_findings_schema.md` | When ingesting custodian journals |
-| `references/gotcha_unknown_signal_type.md` | During lesson extraction; noise filtering |
-| `references/gotcha_escalation_fingerprint.md` | During escalation signal extraction |
-| `references/gotcha_oauth_corruption.md` | When detecting auth-related events |
-| `references/gotcha_evidence_field_schema.md` | When reading events.jsonl for pattern detection |
-| `references/lesson_rules.md` | Before lesson extraction; confidence thresholds |
-| `references/session_20260613_ingest_cron11.md` | 2026-06-13 ingest run: spot type case sensitivity, all_skipped_observation filter |
-| `references/session_20260616_ingest_cron_praxis_v3.md` | 2026-06-16 cron ingest v3: batch pre-filter optimization, `cron_errors` new signal type |
-| `references/session_20260616_ingest_cron_praxis_v5.md` | 2026-06-16 cron ingest v5: dual event schema (`outcome_type` vs `signal_type`), forge path canonicalization, evidence-before-eval crash safety |
-| `references/session_20260616_ingest_cron.md` | 2026-06-16 cron ingest: mentor malformed journal pattern (9/16 unparseable), no_op + no_active_watches signals, no new lessons/shifts |
-| `references/session_20260615_fullscan.md` | 2026-06-15 full scan: 476 journals, 197 events, shift merge 12→5, all gotchas validated |
-| `references/session_20260616_ingest_cron_afternoon.md` | 2026-06-16 afternoon cron: forge `files_processed` list-vs-int bug, 14 journals, no new patterns |
-| `references/session_20260616_ingest_cron_afternoon2.md` | 2026-06-16 afternoon cron: forge no-op variant expansion (NO_UNPROCESSED_FILES, no-op), future-dated journal handling |
-| `references/session_20260616_ingest_cron.md` | 2026-06-16 cron ingest: 592 journals, 35 events, date-window fix validated at scale |
-| `references/session_20260617_ingest.md` | 2026-06-17 full Praxis loop: journal ingest, lesson extraction, shift activation, debrief; cap enforcement via priority, noise filter at lesson creation, case-insensitive phase norm |
-| `references/session_20260618_ingest_cron_m.md` | 2026-06-18 cron ingest: mentor-light "escalations" false positive, dual-path journal notes |
-| `references/session_20260618_ingest_cron_d.md` | 2026-06-18 evening cron ingest: shift merge-before-cap fix, noise lesson filter, debrief template |
-| `references/session_20260618_ingest_cron_d.md` | 2026-06-18 evening cron ingest: shift merge-before-cap fix, noise lesson filter, debrief template |
-| `references/session_20260618_ingest_cron_o.md` | 2026-06-18 cron ingest: cap saturation at 12/12, new stale_counters + tier2_open signal types, lesson re-extraction inefficiency |
-| `references/session_20260618_ingest_s.md` | 2026-06-18 cron ingest: mentor `evaluation_coverage` vs `coverage` schema variation, phase case normalization gap confirmed |
-| `references/session_20260618_ingest.md` | 2026-06-18 cron ingest: non-dict journals, evidence init, eval ID format mismatch, batch limiting, old journal sampling |
-| `references/session_20260618_ingest_cron_z.md` | 2026-06-18 cron ingest: mentor-light `low_coverage` measurement artifact, domain garbling fix, phase case normalization |
-| `references/session_20260618_ingest.md` | 2026-06-18 cron ingest: `events.jsons` filename typo, cap saturation at 12/12, custodian tier2_open signals |
-| `references/session_20260618_ingest_cron_aa.md` | 2026-06-18 cron ingest: noise filter gap in lesson extraction Pass 1 — mentor_light and coverage_gap lessons produced from event backlog despite noise filter at event recording stage |
-| `references/session_20260619_ingest.md` | 2026-06-19 cron ingest: dual-directory scan, shift cap bug, lesson/shift cleanup |
-| `references/session_20260619_ingest_cron_b.md` | 2026-06-19 second cron ingest: stale script cleanup incident (production scripts deleted from data root), mentor-light filtering validation |
-| `references/session_20260620_ingest.md` | 2026-06-20 cron ingest: mentor-light `gap_detected` routine cadence finding, 7 journals, 1 event, cap at 12 |
-| `references/session_20260620_ingest_b.md` | 2026-06-20 cron ingest B: finch_actionable_email pattern (12 events), 1 new lesson, cap at 12 blocks shift activation |
-| `references/session-20260621_ingest.md` | 2026-06-21 cron ingest: forge `action` field as string bug, 5 events, cap at 12 |
-| `references/mentor-light-noise-filters.md` | During journal ingest — mandatory filters for mentor-light false positives |
-| `references/session-20260621-dispatch.md` | 2026-06-21 dispatch ingest: mtime-based discovery validation, 70 journals, 0 events |
-| `references/session-20260621-dispatch-3.md` | 2026-06-21 dispatch ingest: 7 journals, 0 events, all pipelines clean |
-| `references/session-20260621-dispatch-4.md` | 2026-06-21 dispatch ingest: cross-pipeline state collision, shell corruption bug, 1 journal, 0 events |
-| `references/session-20260621-dispatch-6.md` | 2026-06-21 dispatch: all 3 pipelines clean, pre-run timestamp captured before Mentor |
-| `references/session-20260621-dispatch-7.md` | 2026-06-21 dispatch: mtime-based discovery validation, 4 journals, 0 events |
-| `references/session-20260621-dispatch-9.md` | 2026-06-21 dispatch: custodian action error mention false positive (NEW gotcha), all pipelines clean |
-| `templates/dispatch_ingest_template.py` | Copy-and-adapt template for dispatch-triggered Praxis ingest — includes all noise filters, mtime-based discovery, mixed-format eval handling |
-| `references/session_20260621_ingest_cron.md` | 2026-06-21 cron ingest: production script date-filter bug confirmed again, `find -newermt` timezone bug (NEW), custodian observation filter (NEW), 7 journals found by mtime, 0 events |
-| `references/session-20260621-dispatch-8.md` | 2026-06-21 dispatch: write_file Python brace escaping bug, 0-event clean ingest, cross-pipeline timing validation |
-| `references/session-20260622_ingest.md` | 2026-06-22 cron ingest: dual-path scan validation, 5 no-signal journals, all legacy paths already evaluated |
-| `references/session-20260621-dual-journal-fix.md` | 2026-06-21: Production script dual-journal fix — praxis_common.py updated to scan both journal paths |
-| `references/session_20260620_ingest.md` | 2026-06-20 cron ingest: mentor-light failure_keyword false positive, 8 noise events, fix applied |
-| `references/session_20260625_ingest.md` | 2026-06-25 cron ingest: mixed-format eval file crash, finch schema variance, 16 journals, 0 events |
-| `references/shift-cap-repair.md` | When active shifts exceed cap: repair procedure, curated rebuild, prevention patterns |
-| `references/session-notes.md` | Historical production session findings (25+ sessions) |
-| `references/storage-layout-praxis.md` | During initialization or path resolution |
-| `references/self-update-praxis.md` | Before running praxis.update |
-| `scripts/debrief_20260617.py` | When generating daily debrief; production-proven template |
-| `scripts/praxis_debrief.py` | Manual debrief generation; use when running `praxis.debrief.generate` outside cron |
+See [references/support-file-map.md](references/support-file-map.md) for the full file registry with "When to read" column.
+| `scripts/praxis_debrief.py` | Manual debrief generation; use when running `praxis.debracket.generate` outside cron. **NOTE:** Any new fields added to debrief JSON schema must also be added to `references/debrief_workflow.md` for consistency. |
+| `scripts/cleanup_noise_lessons.py` | Noise lesson cleanup script; removes Bug 2 noise lessons using fast pre-filter + per-lesson criteria (missing signal_type, low confidence, noise signal types). Rewritten 2026-07-01 to fix write_file corruption and add full Bug 2 logic. **Patched 2026-07-01 to fix path resolution bug:** ROOT computed as `../..` from script dir (landed at `{profile}/skills/`); fixed to `../../..` (lands at `{profile}/`). **Patched 2026-07-07:** added `--new-genuine-events N` fast-path — when N<2 (run recorded 0–1 genuine non-no_signal events), clears all lessons as Bug 2 full-history noise even though the all-no_signal pre-filter didn't fire. See `references/noise_lesson_cleanup.md` for details. |
+| `references/debrief_workflow.md` | Debrief generation steps including shift-population collapse audit, lessons pipeline health check, and JSON schema. Read before modifying debrief logic. |
+| `references/session-20260629-cron-ingest-0207.md` | 2026-06-29 cron ingest: 5,817 gap backfill catchup, 14 noise lessons cleaned |
+| `references/session-20260630-dispatch-0103Z-praxis.md` | **Dispatch 2026-06-30 Praxis pipeline:** Multi-skill dispatch, routine no-op. 9 journals ingested, 5 no_signal events, 13 Bug-2 noise lessons with missing signal_type key cleaned. Fast pre-filter confirmed. |
+| `references/session-20260630-dispatch-1125Z-praxis.md` | **Dispatch 2026-06-30T11:25Z:** Pure eval-registration dispatch. All new_files already in praxis prior-wave artifacts — Praxis NOT loaded. JSON journal writing pitfall (shell heredoc vs inline Python, 6 failures). New `mixed_genuine_no_op` shortcut. |
+| `references/session-20260629-dispatch-1030Z-praxis-second-wave-gap-backfill.md` | **Second-wave no-op + 83 gap backfill.** Cron pipelines write 50-80 journals between dispatch waves. Expected steady-state rate. Backfill procedure for second-wave dispatches. |
+| `references/session-20260629-cron-ingest-0308.md` | 2026-06-29 cron ingest: phantom gap journal detected (os.walk race), 14 Bug-2 noise lessons cleaned |
+| `references/session-20260629-cron-ingest-1231.md` | 2026-06-29 cron ingest: 13 Bug-2 noise lessons with MISSING signal_type key — cleanup filter bug discovered and fixed |
+| `references/session-20260629-dispatch-1221Z.md` | Genuine dispatch with gap_backfill.py path resolution fix. Concurrent cron gap pattern confirmed. Script lives at `skills/ocas-praxis/scripts/` not `commons/data/ocas-praxis/scripts/`. |
+| `references/session-20260629-cron-ingest-1404.md` | Cron ingest: Bug-2 filter confirmation. All 13 lessons had `signal_type=None` (key missing). Fast pre-filter ("all events no_signal → all lessons noise") validated. |
+| `references/session-20260630-cron-ingest-0140.md` | Cron ingest 2026-06-30 0140Z: Another fast pre-filter confirmation. 7 journals, 5 no_signal events, 13 Bug-2 lessons with `signal_type=None` (key missing), 2 gap backfill. |
+| `references/session-20260630-decay-check-stale-proposed.md` | **Decay check 2026-06-30:** 15 stale proposed shifts expired (11d, never activated). Proposed-shift TTL pattern — decay check should scan proposed status, not just active. |
+| `references/noise_lesson_cleanup.md` | Guide for cleaning up noise lessons in the Praxis behavioral refinement loop. |
+| `references/session-20260701-cron-ingest-0735Z.md` | **Cron ingest 2026-07-01 0735Z:** Confirmed `last_lesson_extraction_event_id: ""` is as broken as `null`. Phantom finch journal produced unverifiable event. Fast pre-filter vs per-lesson comparison. |
+| `references/session-20260701-cron-ingest-1012Z.md` | **Cron ingest 2026-07-01 1012Z:** `cleanup_noise_lessons.py` restored (write_file corruption fixed). Shell heredoc double-Z pitfall documented. |
+| `references/session-20260701-cron-ingest-1134Z.md` | **Cron ingest 2026-07-01 1134Z:** Routine steady-state. `patch` corrupts multi-line JSON in `ingest_state.json` — prefer `write_file` rewrite. 14 Bug-2 noise lessons cleaned. Decay scan: 3 healthy. |

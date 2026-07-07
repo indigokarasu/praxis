@@ -116,6 +116,13 @@ def load_jsonl(path):
 
 
 def append_jsonl(path, records):
+    """Append records to a JSONL file. `records` must be a list of dicts.
+    
+    SAFETY: If a single dict is passed accidentally, wrap it in a list
+    instead of iterating over its keys (which would write bare strings).
+    """
+    if isinstance(records, dict):
+        records = [records]
     with open(path, "a") as f:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
