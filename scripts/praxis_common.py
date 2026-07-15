@@ -239,3 +239,22 @@ def check_disk_space(min_free_gb=1.0):
         return True
     except OSError:
         return True
+
+
+if __name__ == '__main__':
+    import argparse
+    p = argparse.ArgumentParser(
+        description="praxis_common.py — shared constants, paths, and helpers for Praxis ingest scripts. "
+                    "Library module; import from ingest/shift scripts rather than running directly.",
+        usage="python3 praxis_common.py [--show-paths]")
+    p.add_argument("--show-paths", action="store_true",
+                   help="Print the resolved DATA_DIR / JOURNALS_DIRS paths and exit.")
+    args = p.parse_args()
+    if args.show_paths:
+        print("DATA_DIR:", DATA_DIR)
+        print("JOURNALS_DIRS:", JOURNALS_DIRS)
+        print("EVAL_FILE:", EVAL_FILE)
+        print("EVENTS_FILE:", EVENTS_FILE)
+    else:
+        print("praxis_common is a library module. Use --show-paths to inspect resolved paths, "
+              "or import its helpers from another script. Run with -h for details.")

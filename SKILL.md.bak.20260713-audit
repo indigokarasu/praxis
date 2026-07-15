@@ -9,9 +9,6 @@ includes:
 metadata:
   author: Indigo Karasu (indigokarasu)
   version: 3.2.4
-  hermes:
-    tags: [behavioral-refinement, lessons, outcomes, OCAS-core]
-    category: productivity
 tags:
 - behavioral-refinement
 - lessons
@@ -92,9 +89,32 @@ Praxis does not extract or emit Chronicle signals. Lessons remain isolated to th
 
 **Lesson extraction scope: NEW EVENTS ONLY.** Pass 1 must group only events added in the current ingest run (or since the last lesson extraction), NOT the entire `events.jsonl` history. Re-processing all 2,500+ events every run causes: (a) stale lessons re-created for patterns that are no longer active, (b) unknown-domain lessons from legacy events that lack a `skill` field, (c) noise lessons (`no_active_watches`, `system_memory_drop`) that pass the ≥2 event threshold from historical accumulation. Track `last_lesson_extraction_event_id` in the ingest state and filter `all_events` to only events with `event_id` greater than that marker before grouping. See `references/session_20260618_ingest_cron_d.md`.
 
-**Ingest state file (`ingest_state.json`) — create if missing.** The state file at `{agent_root}/commons/data/ocas-praxis/ingest_state.json` tracks `last_lesson_extraction_event_id` for scoped lesson extraction. If the file doesn't exist, create it with all required fields on first run (see `references/inline-examples.md` §Ingest state bootstrap for the canonical dict and `references/support-file-map.md` for the When-to-read signal). If the file exists but is missing fields (e.g., `last_lesson_extraction_event_id`), populate them from defaults before using. Confirmed 2026-06-25: state file had only `last_ingest_run` and `last_dispatch_run`, causing the scoping mechanism to be non-functional until fields were added.
+**Ingest state file (`ingest_state.json`) — create if missing.** The state file at `{agent_root}/commons/data/ocas-praxis/ingest_state.json` tracks `last_lesson_extraction_event_id` for scoped lesson extraction. If the file doesn't exist, create it with all required fields on first run:
+```python
+state = {
+    "last_ingest_run": now.isoformat(),
+    "last_ingest_mtime": now.timestamp(),
+    "last_lesson_extraction_event_id": None,
+    "journals_processed": 0,
+    "total_ingests": 0,
+    "last_evaluated_count": 0,
+}
+```
+If the file exists but is missing fields (e.g., `last_lesson_extraction_event_id`), populate them from defaults before using. Confirmed 2026-06-25: state file had only `last_ingest_run` and `last_dispatch_run`, causing the scoping mechanism to be non-functional until fields were added.
 
-**Fixing `last_lesson_extraction_event_id` after sessions with no events:** If the ingest state shows `last_lesson_extraction_event_id: null` or `""` (empty string) but `events.jsonl` has entries, the scoping mechanism is broken — lesson extraction will re-process the full history every run, producing stale lessons. **The empty string variant (`""`) is equally broken as `null`** — both fail the `event_id > marker` comparison in the lesson extraction scope filter. **PITFALL — empty string vs null:** After any run that produces 0 events (all no_signal), the post-ingest script MUST explicitly set `last_lesson_extraction_event_id` to the last existing event in `events.jsonl` — NOT leave it as `""`. Fix by setting it to the last event's ID — see `references/inline-examples.md` §Repair `last_lesson_extraction_event_id` for the exact bash snippet and `references/support-file-map.md` for the When-to-read signal.
+**Fixing `last_lesson_extraction_event_id` after sessions with no events:** If the ingest state shows `last_lesson_extraction_event_id: null` or `""` (empty string) but `events.jsonl` has entries, the scoping mechanism is broken — lesson extraction will re-process the full history every run, producing stale lessons. **The empty string variant (`""`) is equally broken as `null`** — both fail the `event_id > marker` comparison in the lesson extraction scope filter. Fix by setting it to the last event's ID:
+```bash
+# Get the last event_id from events.jsonl
+LAST_EVT=$(tail -1 {root}/commons/data/ocas-praxis/events.jsonl | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('event_id',''))")
+# Update the state file — only set if LAST_EVT is non-empty
+if [ -n "$LAST_EVT" ]; then
+  python3 -c "import json; f='{root}/commons/data/ocas-praxis/ingest_state.json'; s=json.load(open(f)); s['last_lesson_extraction_event_id']='$LAST_EVT'; json.dump(s, open(f,'w'), indent=2)"
+  echo "Set to $LAST_EVT"
+else
+  echo "events.jsonl empty or has no event_id field — leaving as-is"
+fi
+```
+**PITFALL — empty string vs null:** Both `null` and `""` break the lesson scope filter. After any run that produces 0 events (all no_signal), the post-ingest script MUST explicitly set `last_lesson_extraction_event_id` to the last existing event in `events.jsonl` — NOT leave it as `""`. If you set it to `""` (e.g., because `tail -1 | python3 ...` returns empty for a non-existent event_id), the scoping mechanism stays broken. Always verify: `grep -c "last_lesson_extraction_event_id" state_file` after update, or check the value explicitly. Confirmed 2026-07-01: state had `""` from a prior run, causing this ingest to re-process all 3,795 events.
 After 2026-06-21 dispatch (0 events from 4 mentor-light journals), the state should be set to the last existing event in `events.jsonl` (e.g., `evt-20260621...`).
 
 ## Run Completion
@@ -154,7 +174,20 @@ Script loads ALL events from `events.jsonl` (3,300+) every run. `last_lesson_ext
 
 **Fast pre-filter (dispatch + cron):** Before iterating lessons individually, check the event stream: if every event recorded in the current run has `signal_type` matching no_signal/empty/null/?, skip per-lesson inspection entirely and clear all lessons produced in the same run. This is the most common steady-state outcome (confirmed 2026-06-30 dispatch: 5 events all no_signal → 13 lessons removed in one operation).
 
-**Critical filter fix (2026-06-29):** The `signal_type` key may be entirely absent from Bug-2 noise lessons — not set to `"?"` but simply not present in the dict. Any cleanup filter MUST check all four conditions (see `references/inline-examples.md` §Bug 2 noise-lesson classifier for the exact `is_bug2_noise_lesson` function and `references/support-file-map.md` for the When-to-read signal). Do NOT use `les.get("signal_type", "") == "?"` alone — it misses the missing-key variant. Confirmed 2026-06-29: 13 Bug-2 lessons produced with NO `signal_type` key at all (Pass 2 grounding didn't add it when source events had no signal_type field), bypassed the existing `== "?"` filter.
+**Critical filter fix (2026-06-29):** The `signal_type` key may be entirely absent from Bug-2 noise lessons — not set to `"?"` but simply not present in the dict. Any cleanup filter MUST check all four conditions:
+```python
+def is_bug2_noise_lesson(les):
+    st = les.get("signal_type")  # returns None if key missing
+    if st is None:
+        return True  # key missing entirely = Bug 2 noise
+    st = str(st).strip().lower()
+    if st in ("?", "", "null", "none"):
+        return True
+    if les.get("confidence") == "low":
+        return True
+    return False
+```
+Do NOT use `les.get("signal_type", "") == "?"` alone — it misses the missing-key variant. Confirmed 2026-06-29: 13 Bug-2 lessons produced with NO `signal_type` key at all (Pass 2 grounding didn't add it when source events had no signal_type field), bypassed the existing `== "?"` filter.
 
 ### Bug 3: Eval file ID format mismatch (praxis_common.py §dedup_eval_file)
 Eval file stores IDs as `skill/YYYY-MM-DD/filename.json` (with `.json`), but legacy entries may lack the extension. The dedup normalizes to `journal_id` field but doesn't generate both forms for comparison. **Impact:** Occasional re-scanning of evaluated journals; gap backfill catches these.
@@ -248,7 +281,7 @@ See `references/dispatch-ingest.md` for the full ingest procedure, decision tabl
 
 **Single-skill dispatch (Praxis only):** Follow the standard journal ingest workflow. Use `templates/dispatch_ingest_template.py` with `CAPTURED_TS` — never write inline scripts.
 
-**Multi-skill dispatch (Forge + Mentor + Praxis):** Read  for the full cross-pipeline procedure including second/third/fourth-wave mitigation, concurrent cron gap handling, and cold-start initialization.
+**Multi-skill dispatch (Forge + Mentor + Praxis):** Read `references/dispatch-wave-patterns.md` for the full cross-pipeline procedure including second/third/fourth-wave mitigation, concurrent cron gap handling, and cold-start initialization.
 
 **Key rules:**
 - Capture `last_ingest_run` BEFORE Mentor runs (Mentor heartbeat advances it)
@@ -336,7 +369,14 @@ Key gotchas (see `references/gotchas-praxis.md` for the full catalog):
 - **Custodian `esc-loop` / `escalation-execution-loop` journals with `escalation_needed: true` are GENUINE escalation signals — do NOT filter** — Custodian's scheduled escalation loop (`scan_type: "escalation-execution-loop"`, `run_id` like `esc-loop-*.json`) reviews tracked user-gated issues, pauses burning cron jobs, and sets `escalation_needed: true` when issues remain that require Jared's action (billing / API-key rotation / skill-internal model / interactive Google re-auth). This is a real behavioral signal, NOT one of the routine/healthy custodian false-positive variants (observation / action / typeless light-scan / all-transient light-scan). When a custodian journal has `escalation_needed: true`, record a genuine `escalation` event (do not skip). The `is_false_positive_journal()` pre-filter already excludes esc-loop (it only matches `observation`, `action`, and typeless/`all-transient` light-scan), so it passes through correctly — but this is intentional, not an omission; do not "fix" it by adding esc-loop to the filter. Always still apply the phantom-file guard: verify `os.path.exists()` on the resolved `source_journal` before trusting the event. Confirmed 2026-07-07: `esc-loop-20260707T173625Z.json` produced a verified genuine escalation event (source file present on disk, `escalation_needed: true`, 4 user-gated issues confirmed).
 - **Lesson content dedup required** — The `lesson_id` includes a random/timestamp component, so dedup by `lesson_id` alone does NOT prevent semantic duplicates. Each ingest run generates different IDs for the same `(signal_type, phase)` group. **Always dedup by `(signal_type, failure_phase)` content fingerprint before writing lessons.** See `ingest-script-pattern.md` §Lesson Content Dedup. Without this, `lessons.jsonl` grows by ~9-49 duplicate entries per run.
 
-- **Lesson dedup key must normalize `failure_phase` to lowercase** — The `(signal_type, failure_phase)` dedup key is case-sensitive. Existing lessons may have `failure_phase: "Planning"` (capitalized) while new lessons produce `failure_phase: "planning"` (lowercase), causing the dedup to miss the match and create a semantic duplicate. In the 2026-06-22 ingest, a `coverage_gap` lesson was duplicated because `"Planning" != "planning"`. **Fix:** Normalize both sides to lowercase before comparison — see `references/inline-examples.md` §Lesson dedup key for the `lesson_dedup_key` function and `references/support-file-map.md` for the When-to-read signal. Apply this to both the new lesson AND when building the existing-lesson dedup set. Also apply in Pass 1 event grouping — normalize `failure_phase` before grouping to prevent split groups across case variants. See `references/session_20260622_ingest_followup.md`.
+- **Lesson dedup key must normalize `failure_phase` to lowercase** — The `(signal_type, failure_phase)` dedup key is case-sensitive. Existing lessons may have `failure_phase: "Planning"` (capitalized) while new lessons produce `failure_phase: "planning"` (lowercase), causing the dedup to miss the match and create a semantic duplicate. In the 2026-06-22 ingest, a `coverage_gap` lesson was duplicated because `"Planning" != "planning"`. **Fix:** Normalize both sides to lowercase before comparison:
+  ```python
+  def lesson_dedup_key(les):
+      st = les.get("signal_type", "").strip().lower()
+      phase = les.get("failure_phase", "execution").strip().lower()
+      return (st, phase)
+  ```
+  Apply this to both the new lesson AND when building the existing-lesson dedup set. Also apply in Pass 1 event grouping — normalize `failure_phase` before grouping to prevent split groups across case variants. See `references/session_20260622_ingest_followup.md`.
 - **Active shift cap is hard** — 12-shift cap enforced on every activation
 - **Lessons require causal grounding** — "do X because Y" not just "do X"
 - **Forge `result` field has multiple no-op variants** — Forge scan journals use `result: "no_op"`, `result: "clean"`, `"no-op"` (hyphenated), `"NO_UNPROCESSED_FILES"` (uppercase), and longer strings like `"clean — no pending VariantProposal or VariantDecision files"` or `"clean — no unprocessed VariantProposal or VariantDecision files found"` to indicate routine success (nothing to process). All are healthy system states. **Fix:** Define `FORGE_NO_OP_RESULTS = {"no_op", "clean", "no-op", "no_unprocessed_files"}` and check `result.lower().strip() in FORGE_NO_OP_RESULTS`. Do NOT rely on exact string matching against `"no_op"` alone. The status-less forge schema variant (no `result` key, no `status` key, or empty summary string) is also a no_signal — treat as routine no-op when no other failure indicators are present. See `references/session_20260616_ingest_cron_afternoon2.md` for the full variant catalog.

@@ -132,4 +132,9 @@ def main():
     print(f"Valid lessons: {len(valid_lessons)}")
 
 if __name__ == '__main__':
+    import argparse
+    p = argparse.ArgumentParser(
+        description="Shift cleanup — expire malformed shifts, merge overlaps, enforce 12-shift cap.",
+        usage="python3 shift_cleanup_20260617.py")
+    p.parse_args()
     main()

@@ -14,6 +14,7 @@
 | `references/shift-cap-repair.md` | When active shifts exceed cap: repair procedure, curated rebuild, prevention patterns |
 | `references/storage-layout-praxis.md` | During initialization or path resolution |
 | `references/self-update-praxis.md` | Before running praxis.update |
+| `references/inline-examples.md` | Before writing/repairing `ingest_state.json` (bootstrap vs null/empty-string fix), Bug 2 noise-lesson cleanup, or lesson dedup — holds the exact code snippets extracted from SKILL.md |
 | `templates/dispatch_ingest_template.py` | Copy-and-adapt template for dispatch-triggered Praxis ingest |
 | `scripts/debrief_20260617.py` | When generating daily debrief; production-proven template |
 
