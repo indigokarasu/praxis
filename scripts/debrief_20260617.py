@@ -173,4 +173,13 @@ def main():
     print(debrief_text)
 
 if __name__ == '__main__':
+    import argparse
+    p = argparse.ArgumentParser(
+        description="Daily Praxis debrief generator — prints and writes a plain-language debrief.",
+        usage="python3 debrief_20260617.py [--since-hours N] [--no-write]")
+    p.add_argument("--since-hours", type=int, default=24,
+                   help="Lookback window for the debrief (default 24).")
+    p.add_argument("--no-write", action="store_true",
+                   help="Print the debrief but do not append to debriefs.jsonl/evidence.jsonl.")
+    args = p.parse_args()
     main()

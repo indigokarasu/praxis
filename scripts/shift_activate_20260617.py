@@ -126,4 +126,9 @@ def main():
             print(f"  {s['shift_id']}: {s['domain']}/{s['failure_phase']} - {s['signal_type']} (reinf: {s.get('reinforcement_count', 0)})")
 
 if __name__ == '__main__':
+    import argparse
+    p = argparse.ArgumentParser(
+        description="Shift activation from valid lessons — merge-before-cap, noise filter, quality validation.",
+        usage="python3 shift_activate_20260617.py")
+    p.parse_args()
     main()
