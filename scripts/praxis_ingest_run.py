@@ -351,4 +351,13 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    p = argparse.ArgumentParser(
+        description="Praxis journal ingest — complete re-execution-safe pipeline.",
+        usage="python3 praxis_ingest_run.py [--mode {cron,dispatch,single}]")
+    p.add_argument("--mode", choices=["cron", "dispatch", "single"], default="cron",
+                   help="Run context: cron (default), dispatch, or single-skill. "
+                        "NOTE: this script MUTATES state and writes journals — never "
+                        "invoke as a no-op/inspection call.")
+    args = p.parse_args()
+    main()  # mode currently informational; full pipeline runs regardless
