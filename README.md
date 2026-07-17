@@ -1,24 +1,15 @@
-# 🏛️ Praxis
+# praxis
 
-> **Behavioral refinement loop — measures skill outcomes against baselines and promotes improvements.**
+<p align="center">
+<img src="./assets/readme/hero.svg" width="100%" alt="Praxis: behavioral refinement loop — measures skill outcomes against baselines and promotes improvements.">
+</p>
 
-## Why Praxis?
+praxis — Praxis: behavioral refinement loop — measures skill outcomes against baselines and promotes improvements.
 
-Skills need feedback loops to improve. Praxis provides that by measuring actual outcomes (did the calendar event get created correctly? did the research brief answer the question?), comparing against baselines, and feeding results back into the self-improvement pipeline. It's how skills get better at what they do, not just faster.
 
-Skill packages follow the [agentskills.io](https://agentskills.io/specification) open standard and are compatible with OpenClaw, Hermes Agent, Claude, and any agentskills.io-compliant client.
+> Tell it what you need. It does the work.
 
-## Quick Start
-
-```
-# Check outcomes
-"How did Sands perform this week?"
-
-# Compare baselines
-"Compare current Sands accuracy vs last month"
-```
-
-## What It Does
+## What it does
 
 Praxis is a bounded behavioral refinement loop. It records execution outcomes, measures them against established baselines, and generates refinement signals when performance drifts or improved approaches are discovered. Results flow through journals to Corvus and Mentor for pattern analysis and improvement proposals.
 
@@ -31,3 +22,7 @@ Praxis is a bounded behavioral refinement loop. It records execution outcomes, m
 ---
 
 *Praxis is part of the [OCAS Agent Suite](https://github.com/indigokarasu).*
+
+---
+
+*praxis is part of the [OCAS Agent Suite](https://github.com/indigokarasu).*
