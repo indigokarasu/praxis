@@ -1,7 +1,7 @@
 # praxis
 
 <p align="center">
-<img src="./assets/readme/hero.svg" width="100%" alt="Praxis: behavioral refinement loop — measures skill outcomes against baselines and promotes improvements.">
+<img src="./assets/readme/hero.jpg" width="100%" alt="Praxis: behavioral refinement loop — measures skill outcomes against baselines and promotes improvements.">
 </p>
 
 praxis — Praxis: behavioral refinement loop — measures skill outcomes against baselines and promotes improvements.
