@@ -1,28 +1,12 @@
 # praxis
 
 <p align="center">
-<img src="./assets/readme/hero.jpg" width="100%" alt="Praxis: behavioral refinement loop — measures skill outcomes against baselines and promotes improvements.">
+  <img src="./assets/readme/hero.jpg" width="100%" alt="Praxis: bounded behavioral refinement loop — records outcomes, measures against baselines, and emits refinement signals">
 </p>
 
-praxis — Praxis: behavioral refinement loop — measures skill outcomes against baselines and promotes improvements.
+Praxis records skill execution outcomes, measures them against baselines, and emits refinement signals when performance drifts. It writes journals that feed into Mentor and Corvus for pattern analysis and improvement proposals.
 
-
-> Tell it what you need. It does the work.
-
-## What it does
-
-Praxis is a bounded behavioral refinement loop. It records execution outcomes, measures them against established baselines, and generates refinement signals when performance drifts or improved approaches are discovered. Results flow through journals to Corvus and Mentor for pattern analysis and improvement proposals.
-
-## Dependencies
-
-- All skills — reads journals for outcome data
-- [Corvus](https://github.com/indigokarasu/corvus) — receives BehavioralSignal files
-- [Mentor](https://github.com/indigokarasu/mentor) — receives performance data
-
----
-
-*Praxis is part of the [OCAS Agent Suite](https://github.com/indigokarasu).*
-
----
-
-*praxis is part of the [OCAS Agent Suite](https://github.com/indigokarasu).*
+**Capabilities:**
+- Outcome recording against defined baselines
+- Drift detection with configurable thresholds
+- Journal output for downstream improvement loops
