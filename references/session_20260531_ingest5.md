@@ -50,12 +50,12 @@
 
 ## Gotchas encountered
 1. **Script re-execution after partial crash**: First run wrote events+eval entries before crashing. Second run's eval check correctly found them already evaluated (safe dedup). The post-write dedup in first run was never reached — the 1 new event has no dupes.
-2. **`write_file` overwrites praxis_ingest_run.py**: The script file at `/root/.hermes/skills/ocas-praxis/scripts/praxis_ingest_run.py` was safely overwritten (same content). No data files were affected.
+2. **`write_file` overwrites praxis_ingest_run.py**: The script file at `<hermes-home>/skills/ocas-praxis/scripts/praxis_ingest_run.py` was safely overwritten (same content). No data files were affected.
 
 ## Files modified
-- `/root/.hermes/commons/data/ocas-praxis/events.jsonl` — 1 new event (escalation from custodian)
-- `/root/.hermes/commons/data/ocas-praxis/journals_evaluated.jsonl` — 2 new eval entries, 1 dup removed
-- `/root/.hermes/commons/data/ocas-praxis/lessons.jsonl` — 3 noise lessons extracted then removed
-- `/root/.hermes/commons/data/ocas-praxis/evidence.jsonl` — 1 new evidence record
-- `/root/.hermes/skills/ocas-praxis/scripts/praxis_ingest_run.py` — rewritten with bug fix + unknown filter
-- `/root/.hermes/commons/journals/ocas-praxis/2026-05-31/ingest_20260531044643.json` — this journal
+- `<hermes-home>/commons/data/ocas-praxis/events.jsonl` — 1 new event (escalation from custodian)
+- `<hermes-home>/commons/data/ocas-praxis/journals_evaluated.jsonl` — 2 new eval entries, 1 dup removed
+- `<hermes-home>/commons/data/ocas-praxis/lessons.jsonl` — 3 noise lessons extracted then removed
+- `<hermes-home>/commons/data/ocas-praxis/evidence.jsonl` — 1 new evidence record
+- `<hermes-home>/skills/ocas-praxis/scripts/praxis_ingest_run.py` — rewritten with bug fix + unknown filter
+- `<hermes-home>/commons/journals/ocas-praxis/2026-05-31/ingest_20260531044643.json` — this journal

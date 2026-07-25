@@ -18,7 +18,7 @@ Follow-up ingest run ~24 minutes after the 08:20 run. Scanned 4 unevaluated jour
 
 ## Operational Notes
 
-- **Stale script cleanup incident:** The cleanup pass deleted 46 files from the data directory root, including production scripts (`praxis_review_indigo.py`, `praxis_ingest_run.py`, `praxis_common.py`, `praxis_self_signaler.py`) that had been placed in the root rather than `scripts/`. Recovery: copied from skill directory `/root/.hermes/profiles/indigo/skills/ocas-praxis/scripts/`.
+- **Stale script cleanup incident:** The cleanup pass deleted 46 files from the data directory root, including production scripts (`praxis_review_indigo.py`, `praxis_ingest_run.py`, `praxis_common.py`, `praxis_self_signaler.py`) that had been placed in the root rather than `scripts/`. Recovery: copied from skill directory `<hermes-home>/profiles/indigo/skills/ocas-praxis/scripts/`.
 - **Lesson learned:** The cleanup glob pattern `*.py` in the data root is too broad when production scripts live there. Fix: only clean files matching known stale patterns (ingest_*, scan_*, cleanup_*, etc.), and always verify each file before deleting. Production scripts found in root should be moved to `scripts/`, not deleted.
 - **Mentor-light filtering:** Both mentor-light journals had `gap_detected: true` with `outcome: success`. The measurement artifact filter correctly suppressed these. The second journal had `notes: "Gap detected at 33.8min (within normal variance)"` — explicit confirmation this is routine.
 - **Eval file:** 16,893 entries after this run. No compaction needed (<5,000 threshold for 30-day cutoff not triggered since all entries are recent).

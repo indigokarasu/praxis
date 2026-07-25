@@ -12,4 +12,4 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   exit 0
 fi
 
-python3 /root/.hermes/scripts/skill_update.py ocas-praxis
+python3 ~/.hermes/scripts/skill_update.py ocas-praxis

@@ -61,7 +61,7 @@ Added nested scan steps 8 and 10 to the signal extraction checklist in `ingest-s
 ## Notable Signal: Google OAuth Token
 
 The `oc_google_token_invalid_email_check_20260603_rev2` issue has been open since June 3. The custodian runner noted:
-- MCP credentials at `/root/.google_workspace_mcp/credentials/google-workspace-user.json` are valid (updated 2026-06-04T09:36)
+- MCP credentials at `<gworkspace-creds>/credentials/<user-google-email>.json` are valid (updated 2026-06-04T09:36)
 - The email check job's `last_run_at` is 2026-06-01 (before the script path fix)
 - Job is overdue — should work on next run
 - Marked as "monitoring" instead of active escalation

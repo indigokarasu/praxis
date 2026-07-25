@@ -4,12 +4,12 @@
 
 ### Dual Journal Directory Paths
 Journals are split across TWO directories:
-- `/root/.hermes/commons/journals/` — legacy/default profile (forge, finch, spot)
-- `/root/.hermes/profiles/indigo/commons/journals/` — indigo profile (custodian, mentor, others)
+- `<hermes-home>/commons/journals/` — legacy/default profile (forge, finch, spot)
+- `<hermes-home>/profiles/indigo/commons/journals/` — indigo profile (custodian, mentor, others)
 
 **11 unevaluated journals found on 2026-06-19:**
 - Legacy: `ocas-finch/scan-2210`, `ocas-forge` x 2, `ocas-spot/sweep-cron`
-- Indigo: `ocas-custodian/light`, `ocas-mentor/mentor-light` x 6
+- the agent: `ocas-custodian/light`, `ocas-mentor/mentor-light` x 6
 
 A script using only one path misses half the signals.
 

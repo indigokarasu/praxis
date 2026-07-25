@@ -8,7 +8,7 @@ After `praxis_ingest_run.py` completes, the caller must complete these steps. Th
 import json
 from datetime import datetime, timezone
 
-state_path = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis/ingest_state.json'
+state_path = '<hermes-home>/profiles/indigo/commons/data/ocas-praxis/ingest_state.json'
 with open(state_path) as f:
     state = json.load(f)
 
@@ -40,7 +40,7 @@ from datetime import datetime, timezone
 
 # Load evaluated IDs
 eval_ids = set()
-with open('/root/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl') as f:
+with open('<hermes-home>/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl') as f:
     for line in f:
         line = line.strip()
         if not line: continue
@@ -54,7 +54,7 @@ with open('/root/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evalu
             eval_ids.add(line)
 
 # Load last_ingest_run from state
-with open('/root/.hermes/profiles/indigo/commons/data/ocas-praxis/ingest_state.json') as f:
+with open('<hermes-home>/profiles/indigo/commons/data/ocas-praxis/ingest_state.json') as f:
     state = json.load(f)
 last_ingest_run = state.get('last_ingest_run', '')
 try:
@@ -65,8 +65,8 @@ except:
 
 # Scan both journal directories
 journals_dirs = [
-    '/root/.hermes/profiles/indigo/commons/journals',
-    '/root/.hermes/commons/journals',
+    '<hermes-home>/profiles/indigo/commons/journals',
+    '<hermes-home>/commons/journals',
 ]
 
 gap_entries = []
@@ -94,7 +94,7 @@ for jdir in journals_dirs:
                     })
 
 if gap_entries:
-    with open('/root/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl', 'a') as f:
+    with open('<hermes-home>/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl', 'a') as f:
         for e in gap_entries:
             f.write(json.dumps(e) + '\n')
 
@@ -115,7 +115,7 @@ today = now.strftime('%Y-%m-%d')
 ts = now.strftime('%Y%m%dT%H%M%S')
 
 # VERIFY: path must contain 'journals/ocas-praxis/' — not 'jraxis/'
-journal_dir = f'/root/.hermes/profiles/indigo/commons/journals/ocas-praxis/{today}'
+journal_dir = f'<hermes-home>/profiles/indigo/commons/journals/ocas-praxis/{today}'
 os.makedirs(journal_dir, exist_ok=True)
 
 journal = {
@@ -158,7 +158,7 @@ After writing the Praxis journal, add its ID to `journals_evaluated.jsonl` so a 
 import json
 from datetime import datetime, timezone
 
-EVAL_FILE = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl'
+EVAL_FILE = '<hermes-home>/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl'
 now_iso = datetime.now(timezone.utc).isoformat()
 
 with open(EVAL_FILE, 'a') as f:
@@ -210,7 +210,7 @@ Include `decay_risk_shifts` count in journal metrics. Flag in debrief when any s
 import json, os
 from datetime import datetime, timezone
 
-DATA_DIR = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis'
+DATA_DIR = '<hermes-home>/profiles/indigo/commons/data/ocas-praxis'
 LESSONS_FILE = os.path.join(DATA_DIR, 'lessons.jsonl')
 
 now = datetime.now(timezone.utc)
@@ -252,7 +252,7 @@ After Step 5, run this second cleanup pass:
 ```python
 import json, os
 
-DATA_DIR = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis'
+DATA_DIR = '<hermes-home>/profiles/indigo/commons/data/ocas-praxis'
 LESSONS_FILE = os.path.join(DATA_DIR, 'lessons.jsonl')
 
 # Noise signal types that produce meaningless lessons even at confidence: high
@@ -295,7 +295,7 @@ The production script's Bug #2 (full-history lesson extraction) produces `confid
 ```python
 import json, os
 
-DATA_DIR = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis'
+DATA_DIR = '<hermes-home>/profiles/indigo/commons/data/ocas-praxis'
 LESSONS_FILE = os.path.join(DATA_DIR, 'lessons.jsonl')
 
  ingested_events_count = 3  # from this run's ingest — adjust accordingly
@@ -341,7 +341,7 @@ import json, os
 from collections import defaultdict
 from datetime import datetime, timezone
 
-DATA_DIR = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis'
+DATA_DIR = '<hermes-home>/profiles/indigo/commons/data/ocas-praxis'
 SHIFTS_FILE = os.path.join(DATA_DIR, 'shifts.jsonl')
 now = datetime.now(timezone.utc)
 now_iso = now.isoformat()
@@ -403,7 +403,7 @@ if expired_count > 0:
 ```python
 import glob, os
 
-data_dir = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis'
+data_dir = '<hermes-home>/profiles/indigo/commons/data/ocas-praxis'
 stale_patterns = [
     'ingest_cron_*.py', 'ingest_*.py', 'scan_*.py', 'cleanup_*.py',
     'lesson_extract_*.py', 'lesson_cleanup_*.py', 'shift_cleanup_*.py',
@@ -444,7 +444,7 @@ After all eval file writes, verify no corruption from `append_jsonl` dict-key bu
 ```python
 import json
 
-EVAL_FILE = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl'
+EVAL_FILE = '<hermes-home>/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl'
 corrupted = 0
 with open(EVAL_FILE) as f:
     for i, line in enumerate(f):
@@ -481,7 +481,7 @@ When the production script's bugs (narrow date filter, full-history lesson repro
 
 **Pattern:**
 1. Load `last_ingest_run` from `ingest_state.json` → convert to timestamp
-2. Walk BOTH journal directories (`/root/.hermes/profiles/indigo/commons/journals` and `/root/.hermes/commons/journals`)
+2. Walk BOTH journal directories (`<hermes-home>/profiles/indigo/commons/journals` and `<hermes-home>/commons/journals`)
 3. For each `.json` file: check if `mtime < li_ts` AND not in `journals_evaluated.jsonl` (handle mixed formats)
 4. Read each found journal, apply gotcha filters (mentor-light success, custodian observation, etc.), classify as signal or no_signal
 5. Append eval entries, update state, write journal, run decay scan

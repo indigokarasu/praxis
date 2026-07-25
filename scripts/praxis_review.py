@@ -8,14 +8,14 @@ Usage:
 Scans all skill journals for new entries since the last evaluation,
 extracts behavioral signals, records events/lessons, generates a debrief.
 
-Data directory: /root/.hermes/commons/data/ocas-praxis/
-Journals directory: /root/.hermes/commons/journals/
+Data directory: ~/.hermes/commons/data/ocas-praxis/
+Journals directory: ~/.hermes/commons/journals/
 """
 import json, os, glob, argparse
 from datetime import datetime, timezone, timedelta
 
-DATA_DIR = '/root/.hermes/commons/data/ocas-praxis'
-JOURNALS_DIR = '/root/.hermes/commons/journals'
+DATA_DIR = '~/.hermes/commons/data/ocas-praxis'
+JOURNALS_DIR = '~/.hermes/commons/journals'
 
 
 def load_jsonl(path):

@@ -36,7 +36,7 @@ The state file is small (<3KB) and a full rewrite takes one call. `patch` is ris
 ### Verification
 After any `ingest_state.json` modification (patch or rewrite), verify:
 ```bash
-python3 -c "import json; json.load(open('/root/.hermes/profiles/indigo/commons/data/ocas-praxis/ingest_state.json')); print('Valid JSON ✓')"
+python3 -c "import json; json.load(open('<hermes-home>/profiles/indigo/commons/data/ocas-praxis/ingest_state.json')); print('Valid JSON ✓')"
 ```
 
 ## State at Completion

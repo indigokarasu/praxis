@@ -28,8 +28,8 @@ This causes every journal to appear "unevaluated" on each scan. The dedup mechan
 **Fix needed:** Normalize eval IDs at the start of each ingest run, or rebuild the eval file from the current filesystem scan using the canonical `path_to_journal_id` function.
 
 ## Dual-Path Journal Distribution (3-day window, 09:56Z)
-- Shared (`/root/.hermes/commons/journals/`): 1,086 files
-- Profile (`/root/.hermes/profiles/indigo/commons/journals/`): 673 files
+- Shared (`<hermes-home>/commons/journals/`): 1,086 files
+- Profile (`<hermes-home>/profiles/indigo/commons/journals/`): 673 files
 - Total unique: 1,759 files
 - Profile contains 62% as many recent journals as shared — both paths must be scanned for complete coverage
 

@@ -18,7 +18,7 @@ When the cron window is tight (last ingest was <5 min ago) and the production sc
 import json, os
 from datetime import datetime, timezone
 
-DATA_DIR = "/root/.hermes/profiles/indigo/commons/data/ocas-praxis"
+DATA_DIR = "<hermes-home>/profiles/indigo/commons/data/ocas-praxis"
 EVAL_FILE = os.path.join(DATA_DIR, "journals_evaluated.jsonl")
 STATE_FILE = os.path.join(DATA_DIR, "ingest_state.json")
 
@@ -31,8 +31,8 @@ with open(STATE_FILE) as f:
 
 # Mtime-based discovery (both journal dirs)
 JOURNAL_DIRS = [
-    "/root/.hermes/profiles/indigo/commons/journals",
-    "/root/.hermes/commons/journals"
+    "<hermes-home>/profiles/indigo/commons/journals",
+    "<hermes-home>/commons/journals"
 ]
 
 # Load evaluated IDs (handle mixed formats)

@@ -34,9 +34,9 @@ import argparse
 from datetime import datetime, timezone
 
 # --- Config (cron-safe absolute paths) ---
-DEFAULT_JOURNALS_DIR = '/root/.hermes/profiles/indigo/commons/journals'
-DEFAULT_EVAL_FILE = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl'
-DEFAULT_STATE_FILE = '/root/.hermes/profiles/indigo/commons/data/ocas-praxis/ingest_state.json'
+DEFAULT_JOURNALS_DIR = '~/.hermes/profiles/indigo/commons/journals'
+DEFAULT_EVAL_FILE = '~/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl'
+DEFAULT_STATE_FILE = '~/.hermes/profiles/indigo/commons/data/ocas-praxis/ingest_state.json'
 
 def main():
     parser = argparse.ArgumentParser()

@@ -20,9 +20,9 @@
 
 All dispatcher-provided file paths were relative to the profile journal root:
 - Pattern: `ocas-<skill>/YYYY-MM-DD/<run_id>.json`
-- Resolved path: `/root/.hermes/profiles/indigo/commons/journals/<path>`
+- Resolved path: `<hermes-home>/profiles/indigo/commons/journals/<path>`
 
-Cross-reference against `/root/.hermes/commons/journals/<path>` also (both paths checked).
+Cross-reference against `<hermes-home>/commons/journals/<path>` also (both paths checked).
 
 ## Cross-Pipeline Notes
 

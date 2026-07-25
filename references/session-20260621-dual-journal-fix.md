@@ -3,8 +3,8 @@
 ## Problem
 
 The production `praxis_ingest_run.py` script (via `praxis_common.py`) only scanned the legacy
-journal path (`/root/.hermes/commons/journals`, 4,016 journals) and completely missed the indigo
-profile path (`/root/.hermes/profiles/indigo/commons/journals`, 8,335 journals).
+journal path (`<hermes-home>/commons/journals`, 4,016 journals) and completely missed the indigo
+profile path (`<hermes-home>/profiles/indigo/commons/journals`, 8,335 journals).
 
 This caused 30+ journals from today (2026-06-21) to remain unevaluated across multiple ingest
 runs. These were all routine no-signal journals (forge no-ops, mentor-light success, custodian
@@ -14,7 +14,7 @@ observations), so no events were lost — but the eval file was incomplete.
 
 `praxis_common.py` had:
 ```python
-JOURNALS_DIR = "/root/.hermes/commons/journals"
+JOURNALS_DIR = "<hermes-home>/commons/journals"
 ```
 
 And `find_all_journals()` only walked that single directory.

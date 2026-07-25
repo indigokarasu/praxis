@@ -59,7 +59,7 @@ Routine cron ingest. 1 mentor-light journal processed, 1 no_signal event, 14 Bug
 
 ## Artifacts
 
-- Journal: `/root/.hermes/profiles/indigo/commons/journals/ocas-praxis/2026-07-07/praxis-cron-20260707T005710Z.json`
+- Journal: `<hermes-home>/profiles/indigo/commons/journals/ocas-praxis/2026-07-07/praxis-cron-20260707T005710Z.json`
 - State: `ingest_state.json` updated with `last_ingest_run=2026-07-07T00:58:19Z`, `noise_lessons_cleaned=56` (cumulative)
 - Lessons: `lessons.jsonl` empty (0 lessons after cleanup)
 

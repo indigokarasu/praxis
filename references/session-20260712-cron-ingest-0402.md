@@ -4,7 +4,7 @@
 Scheduled `praxis:journal_ingest` run using the explicit production script path:
 
 ```bash
-python3 /root/.hermes/profiles/indigo/skills/ocas-praxis/scripts/praxis_ingest_run.py
+python3 <hermes-home>/profiles/indigo/skills/ocas-praxis/scripts/praxis_ingest_run.py
 ```
 
 ## Outcome

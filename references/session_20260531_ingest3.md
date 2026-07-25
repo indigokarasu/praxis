@@ -10,7 +10,7 @@ A prior ingest run (praxis-ingest-20260531021613) processed 6 new journals but c
 
 ## Event Created (Prior Run)
 
-- `ocas-weave` — sync aborted: token file `google-workspace-user.json` is 0 bytes (empty). Tagged `failure` / `null` phase. First occurrence — held for pattern.
+- `ocas-weave` — sync aborted: token file `<user-google-email>.json` is 0 bytes (empty). Tagged `failure` / `null` phase. First occurrence — held for pattern.
 
 ## Data State
 

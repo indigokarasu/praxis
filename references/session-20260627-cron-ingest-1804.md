@@ -19,8 +19,8 @@ import os, json
 from datetime import datetime, timezone
 
 JOURNALS_DIRS = [
-    '/root/.hermes/profiles/indigo/commons/journals',
-    '/root/.hermes/commons/journals',
+    '<hermes-home>/profiles/indigo/commons/journals',
+    '<hermes-home>/commons/journals',
 ]
 EVAL_FILE = '{root}/commons/data/ocas-praxis/journals_evaluated.jsonl'
 STATE_FILE = '{root}/commons/data/ocas-praxis/ingest_state.json'
