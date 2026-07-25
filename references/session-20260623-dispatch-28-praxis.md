@@ -23,4 +23,8 @@ Both were evaluated by dispatch #27's Praxis run. No new signals.
 
 ## Path Mismatch Note
 
+<<<<<<< Updated upstream
 Dispatcher reports `new_files` paths relative to `commons/journals/` without the prefix. Actual location: `<hermes-home>/profiles/indigo/commons/journals/<path>`. See Forge session doc `session-20260623-dispatch-28.md` § Pitfall: Dispatcher journal path mismatch.
+=======
+Dispatcher reports `new_files` paths relative to `commons/journals/` without the prefix. Actual location: `~/.hermes/profiles/indigo/commons/journals/<path>`. See Forge session doc `session-20260623-dispatch-28.md` § Pitfall: Dispatcher journal path mismatch.
+>>>>>>> Stashed changes

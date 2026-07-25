@@ -109,14 +109,24 @@ When using `comm -13 <(sort commons) <(sort profile) >> commons` to sync eval fi
 
 **Detection:** After major ingests, compare line counts:
 ```bash
+<<<<<<< Updated upstream
 wc -l <hermes-home>/commons/data/ocas-praxis/journals_evaluated.jsonl
 wc -l <hermes-home>/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl
+=======
+wc -l ~/.hermes/commons/data/ocas-praxis/journals_evaluated.jsonl
+wc -l ~/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl
+>>>>>>> Stashed changes
 ```
 
 **Fix:** If commons > profile, force-sync profile→commons:
 ```bash
+<<<<<<< Updated upstream
 cp <hermes-home>/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl \
    <hermes-home>/commons/data/ocas-praxis/journals_evaluated.jsonl
+=======
+cp ~/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl \
+   ~/.hermes/commons/data/ocas-praxis/journals_evaluated.jsonl
+>>>>>>> Stashed changes
 ```
 
 Profile is authoritative after a complete dispatch ingest. Do NOT rely solely on `comm -13` for eval file sync.

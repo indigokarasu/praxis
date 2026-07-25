@@ -4,7 +4,11 @@
 Scheduled `praxis:journal_ingest` run using the explicit production script path:
 
 ```bash
+<<<<<<< Updated upstream
 python3 <hermes-home>/profiles/indigo/skills/ocas-praxis/scripts/praxis_ingest_run.py
+=======
+python3 ~/.hermes/profiles/indigo/skills/ocas-praxis/scripts/praxis_ingest_run.py
+>>>>>>> Stashed changes
 ```
 
 ## Outcome

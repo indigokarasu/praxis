@@ -34,7 +34,11 @@ The finch scan reveals Google OAuth is **fully expired** for `<user-google-email
 - **`RefreshError: invalid_grant`** on ALL Google MCP tools
 - Affected services: Gmail (blocked), Calendar (blocked), Drive (blocked)
 - All Google Workspace MCP-dependent cron jobs failing
+<<<<<<< Updated upstream
 - Also: missing `<hermes-home>/secrets/plaid.env`, HTTP 429 rate limits, response truncation (3 attempts exhausted), Telegram delivery failure (interpreter shutdown race)
+=======
+- Also: missing `~/.hermes/secrets/plaid.env`, HTTP 429 rate limits, response truncation (3 attempts exhausted), Telegram delivery failure (interpreter shutdown race)
+>>>>>>> Stashed changes
 
 **Praxis assessment:** This maps to existing `auth_failure` active shift (`shf_20260612_074237_a24d08`). No new shift needed — it's already tracked. This is an infrastructure issue requiring <operator>'s manual re-authorization, not a Praxis behavioral adjustment.
 

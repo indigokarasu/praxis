@@ -22,7 +22,7 @@
 
 ### 2. Email triage (GitGuardian)
 
-- **Thread:** `<thread-id>` — "indigokarasu/indigo - 5 internal incidents detected"
+- **Thread:** `<thread-id>` — "<agent-handle>/indigo - 5 internal incidents detected"
 - **Sender:** GitGuardian Team (automated)
 - **Intent:** Informational security alert — JWT + 4 high-entropy secrets in commit 49c0132
 - **Decision:** No action required (internal repo, automated notification)
