@@ -12,7 +12,11 @@
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 NOW=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
 TS_SHORT="${TS%Z}"
+<<<<<<< Updated upstream
 JOURNAL_DIR="<hermes-home>/profiles/indigo/commons/journals/ocas-praxis/$(date -u +%Y-%m-%d)"
+=======
+JOURNAL_DIR="~/.hermes/profiles/indigo/commons/journals/ocas-praxis/$(date -u +%Y-%m-%d)"
+>>>>>>> Stashed changes
 mkdir -p "$JOURNAL_DIR"
 
 cat > "$JOURNAL_DIR/praxis-cron-${TS_SHORT}Z.json" <<EOF

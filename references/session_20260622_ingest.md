@@ -4,7 +4,11 @@
 Cron ingest run at 2026-06-19T01:56 UTC. 5 new journals scanned, 0 events, 0 lessons, 0 shifts.
 
 ## Dual-Path Scan Confirmations
+<<<<<<< Updated upstream
 - Both `<hermes-home>/profiles/indigo/commons/journals/` (indigo profile) and `<hermes-home>/commons/journals/` (legacy) were scanned
+=======
+- Both `~/.hermes/profiles/indigo/commons/journals/` (indigo profile) and `~/.hermes/commons/journals/` (legacy) were scanned
+>>>>>>> Stashed changes
 - Eval file correctly deduped journals from both paths — most June 18-22 legacy-path journals were already evaluated
 - Only 5 journals were truly unevaluated, all no-signal routine scans
 

@@ -4,8 +4,13 @@
 
 ### Dual Journal Directory Paths
 Journals are split across TWO directories:
+<<<<<<< Updated upstream
 - `<hermes-home>/commons/journals/` — legacy/default profile (forge, finch, spot)
 - `<hermes-home>/profiles/indigo/commons/journals/` — indigo profile (custodian, mentor, others)
+=======
+- `~/.hermes/commons/journals/` — legacy/default profile (forge, finch, spot)
+- `~/.hermes/profiles/indigo/commons/journals/` — indigo profile (custodian, mentor, others)
+>>>>>>> Stashed changes
 
 **11 unevaluated journals found on 2026-06-19:**
 - Legacy: `ocas-finch/scan-2210`, `ocas-forge` x 2, `ocas-spot/sweep-cron`

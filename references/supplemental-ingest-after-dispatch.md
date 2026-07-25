@@ -18,9 +18,15 @@
 
 **Detection command:**
 ```bash
+<<<<<<< Updated upstream
 find <hermes-home>/profiles/indigo/commons/journals/ocas-praxis/ \
   -name "*.json" \
   -newer <hermes-home>/profiles/indigo/commons/data/ocas-praxis/last_ingest_run
+=======
+find ~/.hermes/profiles/indigo/commons/journals/ocas-praxis/ \
+  -name "*.json" \
+  -newer ~/.hermes/profiles/indigo/commons/data/ocas-praxis/last_ingest_run
+>>>>>>> Stashed changes
 ```
 
 **Integration with dispatch workflow:** After writing dispatch-wave journal, always run the detection command above. If any files appear, ingest them before completing the dispatch.

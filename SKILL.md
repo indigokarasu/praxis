@@ -2,7 +2,7 @@
 license: MIT
 name: ocas-praxis
 description: 'Bounded behavioral refinement loop. Records outcomes, extracts micro-lessons from repeated patterns, consolidates them into capped active behavior shifts, applies shifts at runtime, and generates plain-language debriefs. Use for recording task outcomes, extracting lessons from repeated patterns, managing active behavior shifts, generating runtime briefs, or producing debriefs. Not for: general memory (use Chronicle), preference tracking (use Taste), real-time task execution, content generation, system health monitoring (use Custodian), or skill evaluation scoring (use Mentor).'
-source: https://github.com/indigokarasu/praxis
+source: https://github.com/<agent-handle>/praxis
 includes:
 - references/**
 - scripts/**
@@ -234,7 +234,11 @@ On first invocation, run `praxis.init`:
 When triggered by the dispatcher, always check `journals_evaluated.jsonl` for the journal filename before running mtime-based discovery. If the journal is already present (regardless of `action_taken`), skip silently — it was already evaluated by a prior Praxis run in the same or previous dispatch wave. This is the correct no-op and prevents duplicate re-ingestion, unnecessary gap backfill, and evidence log bloat.
 
 ```bash
+<<<<<<< Updated upstream
 grep -q "mentor-light-20260624T044239Z" <hermes-home>/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl
+=======
+grep -q "mentor-light-20260624T044239Z" ~/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl
+>>>>>>> Stashed changes
 # If exit code 0: already evaluated, write no-op journal and exit silently
 ```
 
