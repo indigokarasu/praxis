@@ -24,8 +24,8 @@ Steady-state journal ingest. 6 unevaluated journals found, 5 routine no-event sc
 - Domain: ocas-taste / Phase: execution / Type: auth_failure / Category: oauth_token_empty
 - Fingerprint: `oc_google_token_invalid_empty_bytes`
 - Severity: tier_2
-- Token file 0 bytes → json.loads fails → silent fallback to Indigo's account → 0 results, 8 records failed
-- Same root cause as `oc_google_auth_owner_operator` — now confirmed affecting taste scans too
+- Token file 0 bytes → json.loads fails → silent fallback to the agent's account → 0 results, 8 records failed
+- Same root cause as `oc_google_auth_<account-identity>` — now confirmed affecting taste scans too
 
 ## Lessons & Shifts
 

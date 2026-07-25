@@ -25,7 +25,7 @@ The Mentor heartbeat's `cron-heartbeat-light.py` updates `ingest_state.json:last
 
 - **Forge**: no_op (all proposals already processed)
 - **Mentor**: Clean run, 0 new files, active_skills_30d corrected 14→22
-- **Email**: 1 thread (Morning Briefing from google-workspace-user) — archived, no action needed
+- **Email**: 1 thread (Morning Briefing from <user-google-email>) — archived, no action needed
 
 ## Third-Wave Mitigation
 

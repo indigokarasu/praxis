@@ -36,6 +36,6 @@ The `oc_auxiliary_nous_payment_error` (116+ errors/day) was a NEW escalation fin
 ## System health signals surfaced
 
 1. **Auxiliary Nous payment error**: 116+ occurrences/day — auxiliary compression and vision features degraded
-2. **Google OAuth expired**: 7+ days — Gmail, Calendar, Drive, search all unreachable until owner returns (June 3)
+2. **Google OAuth expired**: 7+ days — Gmail, Calendar, Drive, search all unreachable until <operator> returns (June 3)
 3. **Cron degradation trend**: 11/104 jobs errored (up from 9 in prior scan)
 4. **Custodian maintenance**: Successfully fixed 2 no_agent mismatches (elephas:ingest, rally:update)

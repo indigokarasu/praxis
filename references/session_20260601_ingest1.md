@@ -26,7 +26,7 @@
 1. ocas-custodian failure (execution): OAuth revoked, finch 401, Nous payment, missing SKILL.md
 2. ocas-dispatch observation: Google security alert — unauthorized password access (first-seed)
 3. ocas-mentor observation (planning): coverage 0.87%, 13h gap, 6 errors (single seed)
-4. ocas-weave partial (execution): 25/196 enriched, token fallback to Indigo
+4. ocas-weave partial (execution): 25/196 enriched, token fallback to the agent
 
 ## Pattern Detection
 - OAuth token revocation N=3: already covered by existing lessons/shifts. Correctly suppressed.

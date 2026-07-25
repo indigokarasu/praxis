@@ -17,7 +17,7 @@ Two-pass ingest run. First pass missed signals due to incomplete finch `sources.
 
 | # | Signal Type | Source | Detail |
 |---|------------|--------|--------|
-| 1 | `escalation` | ocas-finch/scan-0600 | Critical finding: "Google Workspace MCP server unreachable" — both google-workspace-user and mx.indigo.karasu@gmail.com affected. All 3 Google Workspace tools (Gmail, Calendar, Drive) impacted. |
+| 1 | `escalation` | ocas-finch/scan-0600 | Critical finding: "Google Workspace MCP server unreachable" — both <user-google-email> and <third-party-or-user-email> affected. All 3 Google Workspace tools (Gmail, Calendar, Drive) impacted. |
 | 2 | `execution_error` | ocas-finch/scan-0600 | sources.cron_health: "Unable to verify — Google Workspace MCP unreachable" |
 | 3 | `failure_keyword` | ocas-finch/scan-0600 | Summary contains "unreachable" |
 | 4 | `observation` | ocas-mentor/mentor-light-065528 | Low evaluation coverage: 0.1364 (below 0.2 threshold) |
