@@ -36,10 +36,10 @@ import os
 from datetime import timezone, datetime
 
 # --- CONFIGURATION ---
-DATA_DIR = "~/.hermes/profiles/indigo/commons/data/ocas-praxis"
+DATA_DIR = os.path.expanduser("~/.hermes/profiles/indigo/commons/data/ocas-praxis")
 JOURNALS_DIRS = [
-    "~/.hermes/commons/journals/",
-    "~/.hermes/profiles/indigo/commons/journals/",
+    os.path.expanduser("~/.hermes/commons/journals/"),
+    os.path.expanduser("~/.hermes/profiles/indigo/commons/journals/"),
 ]
 EVAL_FILE = os.path.join(DATA_DIR, "journals_evaluated.jsonl")
 EVENTS_FILE = os.path.join(DATA_DIR, "events.jsonl")

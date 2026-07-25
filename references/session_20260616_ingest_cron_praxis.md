@@ -21,7 +21,7 @@
    - `bones:research` — RuntimeError: Upstream idle timeout exceeded
    This is the first occurrence — needs 3+ events to warrant a lesson. Tracked for pattern emergence.
 
-3. **`calendar_conflict` already covered** — UCSF/TheTopaz scheduling conflict. Existing lesson `les-20260615083557-0001` covers this pattern. No new lesson needed.
+3. **`calendar_conflict` already covered** — UCSF/<third-party-name> scheduling conflict. Existing lesson `les-20260615083557-0001` covers this pattern. No new lesson needed.
 
 4. **Cap at 12/12 — no shift proposals** — All 12 active shifts are 1-2 days old with 0 reinforcements. The `cron_errors` signal is new but at cap, no shift was proposed. If `cron_errors` recurs in future runs, it will accumulate events and eventually warrant a lesson + shift.
 
