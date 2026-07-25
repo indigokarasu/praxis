@@ -967,9 +967,9 @@ The append-only write pattern (`write_jsonl(SHIFTS_FILE, new_proposals, mode="a"
 
 - **Verify JSONL filenames exactly** — A single character typo (e.g., `events.jsons` instead of `events.jsonl`) produces a silent 0-result from file reads. This caused one ingest run to report 0 total events and 0 lesson groups, leading to a "no lessons needed" conclusion that was incorrect. After loading any JSONL file, assert `len(records) > 0` if the file is known to have content, and double-check the filename.
 
-- **`os.path.join` strips leading dot from path components** — `os.path.join("/root", "hermes/commons/data")` returns `/root/hermes/commons/data`, NOT `<hermes-home>/commons/data`. The `.` is treated as a relative path prefix and normalized away. When the agent home is `<hermes-home>/...`, always use **absolute string literals** for path constants, never `os.path.join` with a separate root variable:
+- **`os.path.join` strips leading dot from path components** — `os.path.join("/root", "hermes/commons/data")` returns `<fs-root>/hermes/commons/data`, NOT `<hermes-home>/commons/data`. The `.` is treated as a relative path prefix and normalized away. When the agent home is `<hermes-home>/...`, always use **absolute string literals** for path constants, never `os.path.join` with a separate root variable:
   ```python
-  # WRONG — produces /root/hermes/... (missing dot)
+  # WRONG — produces <fs-root>/hermes/... (missing dot)
   AGENT_ROOT = "/root"
   DATA_DIR = os.path.join(AGENT_ROOT, "hermes/commons/data/ocas-praxis")
 

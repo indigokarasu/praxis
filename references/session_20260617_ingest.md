@@ -68,7 +68,7 @@ If script crashes after writing eval entries but before evidence, journals are m
 - Top shifts by event_count: failure_keyword(60), correction(25), parse_error(11)
 
 ## Files Modified
-- `/root/ingest_main.py` — journal ingest with noise filtering, dedup, evidence-before-eval
-- `/root/lesson_extract.py` — lesson extraction with noise filter, phase validation, content dedup
-- `/root/shift_propose_v2.py` — shift proposal with priority-based cap enforcement
-- `/root/debrief_gen.py` — daily debrief generation
+- `<fs-root>/ingest_main.py` — journal ingest with noise filtering, dedup, evidence-before-eval
+- `<fs-root>/lesson_extract.py` — lesson extraction with noise filter, phase validation, content dedup
+- `<fs-root>/shift_propose_v2.py` — shift proposal with priority-based cap enforcement
+- `<fs-root>/debrief_gen.py` — daily debrief generation
