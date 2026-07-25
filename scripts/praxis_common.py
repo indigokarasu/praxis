@@ -13,14 +13,14 @@ import time
 from datetime import datetime, timezone, timedelta
 
 # Paths
-AGENT_ROOT = "~/.hermes/profiles/indigo"
+AGENT_ROOT = os.path.expanduser("~/.hermes/profiles/indigo")
 
 # DUAL-JOURNAL FIX: JOURNALS_DIR kept for backward compat; JOURNALS_DIRS is the
 # canonical list. find_all_journals() walks both.
-JOURNALS_DIR = "~/.hermes/commons/journals"
+JOURNALS_DIR = os.path.expanduser("~/.hermes/commons/journals")
 JOURNALS_DIRS = [
-    "~/.hermes/profiles/indigo/commons/journals",
-    "~/.hermes/commons/journals",
+    os.path.expanduser("~/.hermes/profiles/indigo/commons/journals"),
+    os.path.expanduser("~/.hermes/commons/journals"),
 ]
 DATA_DIR = os.path.join(AGENT_ROOT, "commons/data/ocas-praxis")
 EVAL_FILE = os.path.join(DATA_DIR, "journals_evaluated.jsonl")

@@ -22,9 +22,9 @@ import sqlite3
 import subprocess
 from datetime import datetime, timezone, timedelta
 
-DATA_DIR = "~/.hermes/commons/data/ocas-praxis"
-JOURNALS_DIR = "~/.hermes/commons/journals"
-SESSIONS_DIR = "~/.hermes/sessions"
+DATA_DIR = os.path.expanduser("~/.hermes/commons/data/ocas-praxis")
+JOURNALS_DIR = os.path.expanduser("~/.hermes/commons/journals")
+SESSIONS_DIR = os.path.expanduser("~/.hermes/sessions")
 NOW = datetime.now(timezone.utc)
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ def scan_cron_jobs(since_hours=24):
     
     # Try reading the jobs.json file directly
     json_paths = [
-        "~/.hermes/cron/jobs.json",
+        os.path.expanduser("~/.hermes/cron/jobs.json"),
         os.path.expanduser("~/.hermes/cron/jobs.json"),
     ]
     jobs = []
@@ -318,7 +318,7 @@ def scan_session_transcripts(since_hours=24):
     # Look for session files
     session_paths = [
         os.path.expanduser("~/.hermes/sessions"),
-        "~/.hermes/sessions",
+        os.path.expanduser("~/.hermes/sessions"),
         os.path.expanduser("~/.hermes/data/sessions"),
     ]
     
