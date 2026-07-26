@@ -29,10 +29,5 @@ Mentor-light heartbeat journals routinely use the word "escalations" when report
 - Shift cap: 12
 
 ## Notes
-<<<<<<< Updated upstream
 - The indigo profile path (`<hermes-home>/profiles/indigo/commons/journals/`) is the correct active path with 7,718 journals. The legacy path has 2,956. The eval file tracks canonical IDs that work for both paths.
 - The `relationships_observed` field in the Praxis journal must use `e.get("failure_phase", "")` not `e["phase"]` — events use `failure_phase` as the key.
-=======
-- The indigo profile path (`~/.hermes/profiles/indigo/commons/journals/`) is the correct active path with 7,718 journals. The legacy path has 2,956. The eval file tracks canonical IDs that work for both paths.
-- The `relationships_observed` field in the Praxis journal must use `e.get("failure_phase", "")` not `e["phase"]` — events use `failure_phase` as the key.
->>>>>>> Stashed changes

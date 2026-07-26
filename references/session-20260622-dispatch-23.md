@@ -37,11 +37,7 @@ Confirmed again: `execute_code` is blocked in cron-triggered sessions. Used `ter
 
 ## Email Triage Results
 
-<<<<<<< Updated upstream
 1 thread evaluated: "Morning Briefing — 2026-06-22" from <user-google-email>. Priority 55, intent: personal. Verdict: action:none — <operator>'s own morning briefing, no reply needed. No Chronicle signals.
-=======
-1 thread evaluated: "Morning Briefing — 2026-06-22" from <user-google-email>. Priority 55, intent: personal. Verdict: action:none — <operator>'s own morning briefing, no reply needed. No Chronicle signals.
->>>>>>> Stashed changes
 
 ## State After
 
