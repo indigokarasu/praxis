@@ -73,11 +73,7 @@ if len(eval_entries) > 5000:
 ```python
 import os
 
-<<<<<<< Updated upstream
 JOURNALS_DIR = "<hermes-home>/profiles/indigo/commons/journals"
-=======
-JOURNALS_DIR = "~/.hermes/profiles/indigo/commons/journals"
->>>>>>> Stashed changes
 SKIP_DIRS = {"ocas-praxis"}
 
 all_files = []
@@ -872,13 +868,8 @@ for skill, jid, fpath, rel_path in meaningful_journals:
 ## Dual Journal Directory Scan (MANDATORY — 2026-06-19)
 
 Journals are stored under BOTH paths:
-<<<<<<< Updated upstream
 - `<hermes-home>/commons/journals/` (legacy/default profile) — 2,988 files
 - `<hermes-home>/profiles/indigo/commons/journals/` (indigo profile) — 7,682 files
-=======
-- `~/.hermes/commons/journals/` (legacy/default profile) — 2,988 files
-- `~/.hermes/profiles/indigo/commons/journals/` (indigo profile) — 7,682 files
->>>>>>> Stashed changes
 
 The indigo profile path contains the active, up-to-date journals for mentor, custodian, and some other skills. The legacy path contains forge, finch, spot, and other skills.
 
@@ -886,13 +877,8 @@ The indigo profile path contains the active, up-to-date journals for mentor, cus
 
 ```python
 JOURNALS_DIRS = [
-<<<<<<< Updated upstream
     "<hermes-home>/commons/journals",
     "<hermes-home>/profiles/indigo/commons/journals",
-=======
-    "~/.hermes/commons/journals",
-    "~/.hermes/profiles/indigo/commons/journals",
->>>>>>> Stashed changes
 ]
 
 def find_journal(jid):
@@ -917,11 +903,7 @@ When scanning the filesystem for unevaluated journals, walk BOTH directories and
 import json
 from datetime import datetime, timezone
 
-<<<<<<< Updated upstream
 state_path = '<hermes-home>/profiles/indigo/commons/data/ocas-praxis/ingest_state.json'
-=======
-state_path = '~/.hermes/profiles/indigo/commons/data/ocas-praxis/ingest_state.json'
->>>>>>> Stashed changes
 with open(state_path) as f:
     state = json.load(f)
 
@@ -979,34 +961,21 @@ The append-only write pattern (`write_jsonl(SHIFTS_FILE, new_proposals, mode="a"
 
 ## File Path Pitfall
 
-<<<<<<< Updated upstream
 - **EVAL FILE PATH: `data/ocas-praxis/` NOT `data/praxis/`** — There are two `journals_evaluated.jsonl` files. The correct one (38,000+ entries) is at `<hermes-home>/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl`. The stale duplicate at `data/praxis/journals_evaluated.jsonl` has only 25 legacy entries. Always use the `data/ocas-praxis/` path. Confirmed 2026-06-25 dispatch #110.
-=======
-- **EVAL FILE PATH: `data/ocas-praxis/` NOT `data/praxis/`** — There are two `journals_evaluated.jsonl` files. The correct one (38,000+ entries) is at `~/.hermes/profiles/indigo/commons/data/ocas-praxis/journals_evaluated.jsonl`. The stale duplicate at `data/praxis/journals_evaluated.jsonl` has only 25 legacy entries. Always use the `data/ocas-praxis/` path. Confirmed 2026-06-25 dispatch #110.
->>>>>>> Stashed changes
 
 - **EVAL FILE SCHEMA: `journal_id` not `journal_file`** — The eval file uses mixed schemas. Modern entries use `{"journal_id": "ocas-forge/2026-06-25/forge-scan-TS.json", ...}`. Legacy entries from dispatch use `{"journal_file": "...", "ingested_at": "...", ...}`. When checking if a journal is already evaluated, check BOTH `journal_id` and `journal_file` fields. When writing new entries, use `journal_id`.
 
 - **Verify JSONL filenames exactly** — A single character typo (e.g., `events.jsons` instead of `events.jsonl`) produces a silent 0-result from file reads. This caused one ingest run to report 0 total events and 0 lesson groups, leading to a "no lessons needed" conclusion that was incorrect. After loading any JSONL file, assert `len(records) > 0` if the file is known to have content, and double-check the filename.
 
-<<<<<<< Updated upstream
 - **`os.path.join` strips leading dot from path components** — `os.path.join("/root", "hermes/commons/data")` returns `<fs-root>/hermes/commons/data`, NOT `<hermes-home>/commons/data`. The `.` is treated as a relative path prefix and normalized away. When the agent home is `<hermes-home>/...`, always use **absolute string literals** for path constants, never `os.path.join` with a separate root variable:
-=======
-- **`os.path.join` strips leading dot from path components** — `os.path.join("/root", "hermes/commons/data")` returns `<fs-root>/hermes/commons/data`, NOT `~/.hermes/commons/data`. The `.` is treated as a relative path prefix and normalized away. When the agent home is `~/.hermes/...`, always use **absolute string literals** for path constants, never `os.path.join` with a separate root variable:
->>>>>>> Stashed changes
   ```python
   # WRONG — produces <fs-root>/hermes/... (missing dot)
   AGENT_ROOT = "/root"
   DATA_DIR = os.path.join(AGENT_ROOT, "hermes/commons/data/ocas-praxis")
 
   # CORRECT — use absolute literals
-<<<<<<< Updated upstream
   DATA_DIR = "<hermes-home>/commons/data/ocas-praxis"
   JOURNALS_DIR = "<hermes-home>/commons/journals"
-=======
-  DATA_DIR = "~/.hermes/commons/data/ocas-praxis"
-  JOURNALS_DIR = "~/.hermes/commons/journals"
->>>>>>> Stashed changes
   ```
   This caused one ingest run to silently write all output to the wrong path, then crash on `FileNotFoundError` on the first read-back. The run appeared to complete but all data was written to a nonexistent directory tree.
 
@@ -1014,11 +983,7 @@ The append-only write pattern (`write_jsonl(SHIFTS_FILE, new_proposals, mode="a"
 
 - **Periodic stale script cleanup** — Even with the `scripts/` convention, stale `.py` files accumulate in the data dir root over time. During any ingest run, if `ls *.py | wc -l` exceeds ~10 in the data dir root, run the cleanup pattern from `gotchas-praxis.md` §Stale Script Accumulation before proceeding. This prevents disk bloat and avoids the agent's file cleanup silently removing active scripts.
 
-<<<<<<< Updated upstream
 - **`os.path.isdir(name)` vs `os.path.isdir(path)` gotcha** — When iterating date directories, the loop variable is the directory *name* (e.g., `"2026-06-14"`), not the full path. Calling `os.path.isdir(date_dir)` checks relative to the current working directory, not the skill's journal directory. This returns False for all date dirs, causing the scan to find 0 journals. **Always construct the full path first**: `date_path = os.path.join(skill_path, date_dir)` then check `os.path.isdir(date_path)`. Discovered 2026-06-14: first ingest run found 0 journals because `os.path.isdir("2026-06-14")` was checked relative to CWD (`<hermes-home>/profiles/indigo/commons/data/ocas-praxis/`) instead of the actual journal path.
-=======
-- **`os.path.isdir(name)` vs `os.path.isdir(path)` gotcha** — When iterating date directories, the loop variable is the directory *name* (e.g., `"2026-06-14"`), not the full path. Calling `os.path.isdir(date_dir)` checks relative to the current working directory, not the skill's journal directory. This returns False for all date dirs, causing the scan to find 0 journals. **Always construct the full path first**: `date_path = os.path.join(skill_path, date_dir)` then check `os.path.isdir(date_path)`. Discovered 2026-06-14: first ingest run found 0 journals because `os.path.isdir("2026-06-14")` was checked relative to CWD (`~/.hermes/profiles/indigo/commons/data/ocas-praxis/`) instead of the actual journal path.
->>>>>>> Stashed changes
 
 - **Nested f-string anti-pattern in write_file scripts** — When writing Python scripts via `write_file`, nested f-strings with dict access using escaped quotes (`f"{[f'{s[\"signal_type\"]}:{s[\"skill\"]}' for s in signals]}"`) cause `SyntaxError: unexpected character after line continuation character`. This is a Python f-string limitation (pre-3.12): f-string expressions cannot contain backslash escapes. **Fix:** Break the expression into a separate variable before the f-string:
   ```python

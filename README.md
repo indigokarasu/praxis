@@ -8,11 +8,7 @@ Bounded behavioral refinement loop. Records outcomes, extracts micro-lessons fro
 **Version:** 3.2.4
 **Type:** 
 **Layer:** productivity
-<<<<<<< Updated upstream
-**Author:** Indigo Karasu
-=======
 **Author:** <agent-name>
->>>>>>> Stashed changes
 
 ---
 

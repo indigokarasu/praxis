@@ -8,17 +8,10 @@ Praxis journal ingest cron ran successfully. 499 new journals processed, 82 new 
 
 ### 1. Two Journal Directory Paths Exist
 
-<<<<<<< Updated upstream
 - `<hermes-home>/commons/journals/` — 2,929 files (legacy/default profile)
 - `<hermes-home>/profiles/indigo/commons/journals/` — 7,667 files (indigo profile, active)
 
 The indigo profile path contains the active, up-to-date journals. The skill's `ingest-script-pattern.md` incorrectly references `<hermes-home>/commons/journals/`. **Fix:** Always use `<hermes-home>/profiles/indigo/commons/journals/`.
-=======
-- `~/.hermes/commons/journals/` — 2,929 files (legacy/default profile)
-- `~/.hermes/profiles/indigo/commons/journals/` — 7,667 files (indigo profile, active)
-
-The indigo profile path contains the active, up-to-date journals. The skill's `ingest-script-pattern.md` incorrectly references `~/.hermes/commons/journals/`. **Fix:** Always use `~/.hermes/profiles/indigo/commons/journals/`.
->>>>>>> Stashed changes
 
 ### 2. `tier_1_fixes_applied` Int-vs-List Bug
 

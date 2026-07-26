@@ -28,7 +28,6 @@
 ## Key Learning: Dispatcher Path Mismatch
 
 The dispatcher's `details.new_files` field contains paths like `ocas-forge/2026-06-22/forge-scan-*.json`. These are **journal** paths, not data paths. The actual files are at:
-<<<<<<< Updated upstream
 - `<hermes-home>/profiles/indigo/commons/journals/<path>` (primary)
 - `<hermes-home>/commons/journals/<path>` (legacy)
 
@@ -37,16 +36,6 @@ NOT at `<hermes-home>/commons/data/<skill>/...` — that directory doesn't exist
 **Diagnostic pattern**: When `read_file` fails on dispatcher-provided paths, use `find` to locate by filename:
 ```bash
 find <hermes-home>/profiles/indigo/commons/journals/ <hermes-home>/commons/journals/ -name "<filename>" 2>/dev/null
-=======
-- `~/.hermes/profiles/indigo/commons/journals/<path>` (primary)
-- `~/.hermes/commons/journals/<path>` (legacy)
-
-NOT at `~/.hermes/commons/data/<skill>/...` — that directory doesn't exist for journals.
-
-**Diagnostic pattern**: When `read_file` fails on dispatcher-provided paths, use `find` to locate by filename:
-```bash
-find ~/.hermes/profiles/indigo/commons/journals/ ~/.hermes/commons/journals/ -name "<filename>" 2>/dev/null
->>>>>>> Stashed changes
 ```
 
 ## Email Triage Results
