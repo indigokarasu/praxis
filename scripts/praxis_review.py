@@ -14,8 +14,8 @@ Journals directory: ~/.hermes/commons/journals/
 import json, os, glob, argparse
 from datetime import datetime, timezone, timedelta
 
-DATA_DIR = '~/.hermes/commons/data/ocas-praxis'
-JOURNALS_DIR = '~/.hermes/commons/journals'
+DATA_DIR = os.path.join(os.environ.get("HERMES_HOME", os.path.join(os.path.expanduser("~"), ".hermes", "profiles", "indigo")), 'commons/data/ocas-praxis')
+JOURNALS_DIR = os.path.join(os.environ.get("HERMES_HOME", os.path.join(os.path.expanduser("~"), ".hermes", "profiles", "indigo")), 'commons/journals')
 
 
 def load_jsonl(path):

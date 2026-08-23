@@ -23,7 +23,7 @@ from collections import Counter, defaultdict
 
 # Profile-aware path
 PROFILE = os.environ.get("HERMES_PROFILE", "indigo")
-AGENT_ROOT = fos.path.expanduser("~/.hermes/profiles/{PROFILE}")
+AGENT_ROOT = os.path.expanduser(f"~/.hermes/profiles/{PROFILE}")
 DATA_DIR = os.path.join(AGENT_ROOT, "commons/data/ocas-praxis")
 JOURNALS_DIR = os.path.join(AGENT_ROOT, "commons/journals")
 
