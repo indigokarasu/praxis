@@ -69,8 +69,11 @@ def main():
         state = json.load(f)
     li_run = state.get('last_ingest_run', '')
     if li_run:
-        li_dt = datetime.fromisoformat(li_run.replace('Z', '+00:00'))
-        li_ts = li_dt.timestamp()
+        if isinstance(li_run, (int, float)):
+            li_ts = float(li_run)
+        else:
+            li_dt = datetime.fromisoformat(li_run.replace('Z', '+00:00'))
+            li_ts = li_dt.timestamp()
     else:
         li_ts = 0
 
