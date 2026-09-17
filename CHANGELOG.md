@@ -1,5 +1,11 @@
 ## [2.6.5] - 2026-04-26
 
+## [3.3.0] - 2026-09-16
+
+### Changed
+- **Staged behavior shift approval** — proposed behavior shifts / skill rebuilds are now routed to `{agent_root}/commons/data/ocas-forge/staged/{skill}/` for `ocas-fellow` benchmark verification before committing to production (staged-write-approval gate per `spec-ocas-suite-cross-skill-updates.md`). Promotion on successful `VariantDecision`; rejection with reason otherwise.
+
+
 ### Changed
 - Version alignment: SKILL.md frontmatter, CHANGELOG.md, and GitHub release tag now in sync per spec-ocas-skill-publishing.md. No functional change in this release.
 

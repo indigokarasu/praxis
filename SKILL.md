@@ -8,7 +8,7 @@ includes:
 - scripts/**
 metadata:
   author: Indigo Karasu (indigokarasu)
-  version: 3.2.4
+  version: "3.3.0"
   hermes:
     tags: [behavioral-refinement, lessons, outcomes, OCAS-core]
     category: productivity
@@ -86,7 +86,7 @@ Praxis does not extract or emit Chronicle signals. Lessons remain isolated to th
 
 ## Core Loop
 
-1. Record event → 2. Extract lessons (if pattern detected) → 3. **Upgrade lessons** — mandatory second pass to add causal grounding (what/why/when) and set `confidence: high` → 4. **Dedup lessons against active shifts** — before writing new lessons, check if an active shift already covers the same `(signal_type, failure_phase)` key; if yes, skip lesson creation (the shift already encodes it) → 5. Propose shift (check domain+phase overlap, handle mixed schemas) → 6. Activate (if cap allows) → 7. Generate debrief
+1. Record event → 2. Extract lessons (if pattern detected) → 3. **Upgrade lessons** — mandatory second pass to add causal grounding (what/why/when) and set `confidence: high` → 4. **Dedup lessons against active shifts** — before writing new lessons, check if an active shift already covers the same `(signal_type, failure_phase)` key; if yes, skip lesson creation (the shift already encodes it) → 5. Propose shift (check domain+phase overlap, handle mixed schemas) → 6. **Stage for approval** — route the proposed shift / skill rebuild to `{agent_root}/commons/data/ocas-forge/staged/{skill}/` for `ocas-fellow` benchmark verification **before** committing to production (per `spec-ocas-suite-cross-skill-updates.md` staged-write-approval gate). On successful pass-rate verification (`ocas-mentor` `VariantDecision`), promote to active; otherwise reject with reason → 7. Activate (if cap allows， → 8. Generate debrief
 
 **Two-pass lesson extraction is mandatory.** Pass 1 groups events by signal_type+phase and produces lesson stubs. Pass 2 adds full causal grounding (what/why/when) and upgrades confidence to `high`. Without Pass 2, no lessons can produce shifts. See `references/ingest-script-pattern.md` for the production-proven script.
 
