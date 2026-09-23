@@ -29,7 +29,7 @@ Routine 30-min cron ingest. 5 unevaluated journals found, 0 behavioral signals. 
 - Cleaned up 47 stale ingest/fix/scan scripts from data directory
 
 ## Observations
-- The 12/12 active shift cap is fully utilized. Several active shifts have `reinforced_count: 0` (cross_skill, finch-oauth, finch-execution, weave-failure, dispatch-correction, elephas-correction). These may be candidates for decay review.
+- The 12/12 active shift cap is fully utilized. Several active shifts have `reinforced_count: 0` (cross_skill, finch-oauth, finch-execution, weave-failure, dispatch-correction, chronicle-correction). These may be candidates for decay review.
 - The proposed shift pool (214) is large but within manageable range.
 - `journals_evaluated.jsonl` at 6,196 entries is above the 5,000 compaction threshold — the compaction should have fired. This needs investigation.
 

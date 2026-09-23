@@ -19,9 +19,9 @@
 | taste-scan-historical-365d | taste | NO SIGNAL | — |
 | r_journal-scan-2000 | forge | NO SIGNAL | — |
 | r_journal-scan-1830 | forge | NO SIGNAL | — |
-| run_cron_20260604_171837 | elephas | NO SIGNAL | — |
-| run_cron_20260604_164050 | elephas | NO SIGNAL | — |
-| run_cron_20260604_165325 | elephas | NO SIGNAL | — |
+| run_cron_20260604_171837 | chronicle | NO SIGNAL | — |
+| run_cron_20260604_164050 | chronicle | NO SIGNAL | — |
+| run_cron_20260604_165325 | chronicle | NO SIGNAL | — |
 | monitor-20260604-1709 | bones | NO SIGNAL | — |
 | sweep_20260604_0945 | spot | NO SIGNAL | — |
 | sweep_20260604_100431 | spot | NO SIGNAL | — |

@@ -10,8 +10,8 @@ Routine 30-min cron ingest. 5 unevaluated journals found, 1 event recorded, 0 ne
 |---------|--------|--------|
 | `ocas-finch/2026-06-04/scan-2022.json` | `platform_failure` | Event recorded |
 | `ocas-vesper/2026-06-04/r_20260604_evening.json` | none | no_signal |
-| `ocas-elephas/2026-06-05/run_cron_20260605_024818.json` | none | no_signal |
-| `ocas-elephas/2026-06-05/run_cron_20260605_034557.json` | none | no_signal |
+| `chronicle/2026-06-05/run_cron_20260605_024818.json` | none | no_signal |
+| `chronicle/2026-06-05/run_cron_20260605_034557.json` | none | no_signal |
 | `ocas-spot/2026-06-04/sweep_20260604_204000.json` | none | no_signal |
 
 ## Event Details

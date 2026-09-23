@@ -19,7 +19,7 @@
 
 1. `ocas-forge/2026-06-12/r_20260612_journal-scan-1781295549.json` — `result: "NO_UNPROCESSED_FILES"`, no signals
 2. `ocas-forge/2026-06-12/r_20260612_journal-scan-1781295785.json` — `status: "no_action"`, no signals
-3. `ocas-elephas/2026-06-12/run_cron_20260612_202312.json` — `signals_created: 0`, no signals
+3. `chronicle/2026-06-12/run_cron_20260612_202312.json` — `signals_created: 0`, no signals
 
 All 3 were routine no-ops. All marked `no_signal` in eval.
 

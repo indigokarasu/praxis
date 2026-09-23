@@ -9,7 +9,7 @@ Follow-up ingest run ~24 minutes after the 08:20 run. Scanned 4 unevaluated jour
 
 | Journal | Signal | Action |
 |---------|--------|--------|
-| `ocas-elephas/run_cron_082931` | 0 signals | no_signal |
+| `chronicle/run_cron_082931` | 0 signals | no_signal |
 | `ocas-forge/journal-scan-013308` | clean (no unprocessed) | forge_no_op |
 | `ocas-mentor/mentor-light-083454` | gap_detected, coverage=0.33 | no_signal (measurement artifact) |
 | `ocas-mentor/mentor-light-083526` | gap_detected, 33.8min normal variance | no_signal (filtered) |

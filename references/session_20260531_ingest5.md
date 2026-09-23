@@ -25,7 +25,7 @@
 
 ### Lesson extraction
 - 3 lessons auto-extracted by pattern_grouper — all `confidence: low`, all `pattern_key: "unknown"`
-- Root cause: legacy events (42 custodian, 22 elephas, 12 mentor) use old schema with `signal_type: "?"` → grouped as `"unknown"`
+- Root cause: legacy events (42 custodian, 22 chronicle, 12 mentor) use old schema with `signal_type: "?"` → grouped as `"unknown"`
 - All 3 noise lessons **removed** (62 lessons remain, 0 with unknown pattern_key)
 - **Fix applied**: added `signal_type` filter in lesson extraction to skip `unknown`/`?`/empty keys
 

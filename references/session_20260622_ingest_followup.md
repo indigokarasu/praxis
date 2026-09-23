@@ -8,7 +8,7 @@ Cron ingest run at 2026-06-19T02:29 UTC (follow-up to 01:56 partial run). 6 new 
 - **ocas-mentor** `mentor-light-20260619T015748Z.json`: `no_signal` (mentor-light routine)
 - **ocas-custodian** `light-scan-2026-06-18T190000-0700.json`: `no_signal` (custodian routine)
 - **ocas-forge** `r_20260618_journal-scan-1781835543.json`: 0 signals
-- **ocas-elephas** `run_cron_20260619_020605.json`: `no_signal` (elephas routine)
+- **chronicle** `run_cron_20260619_020605.json`: `no_signal` (chronicle routine)
 - **ocas-spot** `sweep_20260618_191127.json`: `no_signal` (spot routine)
 
 ## Key Finding: Lesson Dedup Failure Due to Phase Case Mismatch

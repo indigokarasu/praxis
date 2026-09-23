@@ -10,7 +10,7 @@
 
 ## Key Observations
 
-1. **Lucid degraded mode** — ocas-lucid dream cycle ran in degraded mode (mempalace MCP unavailable). Known infrastructure issue, not a behavioral pattern.
+1. **Lucid degraded mode** — ocas-lucid dream cycle ran in degraded mode (the memory store MCP unavailable). Known infrastructure issue, not a behavioral pattern.
 
 2. **Lesson extraction noise filter NOT applied** — The v2 ingest script extracted 3 lessons that should have been suppressed by `NOISE_SIGNAL_TYPES`:
    - `cron_error/Execution` (4 events) — routine cron infrastructure noise

@@ -9,7 +9,7 @@ All 20 journals were routine no-signal outcomes:
 - **6× ocas-forge** (journal-scan): All no-ops (`result: "clean"` or `actions_taken: []` with empty findings)
 - **2× ocas-spot** (sweep): All watches inactive/skipped — `no_active_watches` (filtered as expected state)
 - **1× ocas-lucid** (dream): Routine processing
-- **1× ocas-elephas** (ingest): Routine completion
+- **1× chronicle** (ingest): Routine completion
 
 ## Key Findings
 

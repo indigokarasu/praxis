@@ -12,9 +12,9 @@
 |-------|------|--------|
 | ocas-custodian | esc-run-20260601-1139 | escalation_needed: 4 user-action issues |
 | ocas-dispatch | dispatch_draft_20260601_013100Z | Google security alert (unauthorized access) |
-| ocas-elephas | run_2678a999e282 | completed (25 signals, 4 candidates) |
-| ocas-elephas | run_436977a4713f | completed (no-op) |
-| ocas-elephas | run_95c3cf2f01f2 | completed (10 signals, 6 candidates) |
+| chronicle | run_2678a999e282 | completed (25 signals, 4 candidates) |
+| chronicle | run_436977a4713f | completed (no-op) |
+| chronicle | run_95c3cf2f01f2 | completed (10 signals, 6 candidates) |
 | ocas-forge | journal-scan-20260601 | clear |
 | ocas-forge | r_20260601181933 | clear |
 | ocas-mentor | heartbeat-light-20260601T182257 | coverage gap (0.0087, 13h gap) |

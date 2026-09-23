@@ -5,7 +5,7 @@ Legacy events (pre-v3.0) store `signal_type` as `"?"` or omit the field entirely
 
 ## Production Impact
 - ocas-custodian: 42 legacy events with `signal_type: "?"`
-- ocas-elephas: 22 legacy events with `signal_type: "?"`
+- chronicle: 22 legacy events with `signal_type: "?"`
 - ocas-mentor: 12 legacy events with `signal_type: "?"`
 - These generated 3 useless low-confidence lessons per ingest cycle until the filter was added
 

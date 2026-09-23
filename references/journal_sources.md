@@ -6,7 +6,7 @@ Skills known to produce journals that Praxis reads:
 - ocas-spot — booking attempts, failures, bot detection outcomes
 - ocas-rally — trade execution, research outcomes, healthcheck results
 - ocas-taste — preference signals and recommendations
-- ocas-elephas — knowledge graph ingestion events
+- chronicle — knowledge graph ingestion events
 - ocas-finch — self-improvement mining results
 - ocas-fellow — experimentation outcomes
 - ocas-scout — research results and OSINT findings

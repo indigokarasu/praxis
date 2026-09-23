@@ -116,7 +116,7 @@ When the unevaluated set exceeds 500 journals, cap the batch to avoid timeout. P
 OCAS_SKILLS = {
     "ocas-mentor", "ocas-custodian", "ocas-forge", "ocas-spot",
     "ocas-finch", "ocas-sands", "ocas-rally", "ocas-taste",
-    "ocas-dispatch", "ocas-elephas", "ocas-expansion", "ocas-bones",
+    "ocas-dispatch", "chronicle", "ocas-expansion", "ocas-bones",
     "ocas-bower", "ocas-fellow", "ocas-genie", "ocas-haiku",
     "ocas-imagine", "ocas-inception", "ocas-look", "ocas-lucid",
     "ocas-multipass", "ocas-reach", "ocas-sift", "ocas-vibes",
@@ -220,7 +220,7 @@ def should_suppress_summary_signals(summary_str, signals):
 
 **Spot sweep `failure_keyword` false positive from routine no-ops (MANDATORY):** ocas-spot sweep journals (not just "observation" type — many use type "sweep" or no type field) routinely report all watches inactive, skipped, or deactivated. Summaries contain "inactive", "skipped", "deactivated", "zero active watches" — which match failure keyword filters. These are routine no-op states. **Fix:** After extracting `failure_keyword` signals from spot journals, apply a secondary check: if the summary contains phrases like "all watches inactive", "zero active watches", "all skipped", "all deactivated", clear the `failure_keyword` signals as routine no-op. The existing spot observation handler only catches type "Observation" (capital O) — it misses type "sweep" and typeless spot journals entirely. In the 2026-06-14 ingest, 6 false-positive spot failure_keyword events required manual cleanup.
 
-**Schema-ambiguous journal noise filter (MANDATORY):** Some journals (e.g., ocas-elephas) use non-standard schemas without a top-level `status` field. When `data.get("status", "")` returns `""`, the noise filter `if status in ("ok", "success", "complete", "completed") and not signals` does NOT match, and the journal falls through without an eval_update. This causes two problems: (1) the journal is not marked as evaluated and will be re-scanned next cycle, and (2) if eval_updates are written in a batch append, the journal may inherit a wrong `action_taken` from a previous journal. **Fix:** After the signal extraction loop, if `signals` is empty AND no eval_update was appended for this journal, append a `no_signal` eval_update explicitly. Also handle the case where `status` is absent/empty by treating it as a non-failure when no other signals are present:
+**Schema-ambiguous journal noise filter (MANDATORY):** Some journals (e.g., chronicle) use non-standard schemas without a top-level `status` field. When `data.get("status", "")` returns `""`, the noise filter `if status in ("ok", "success", "complete", "completed") and not signals` does NOT match, and the journal falls through without an eval_update. This causes two problems: (1) the journal is not marked as evaluated and will be re-scanned next cycle, and (2) if eval_updates are written in a batch append, the journal may inherit a wrong `action_taken` from a previous journal. **Fix:** After the signal extraction loop, if `signals` is empty AND no eval_update was appended for this journal, append a `no_signal` eval_update explicitly. Also handle the case where `status` is absent/empty by treating it as a non-failure when no other signals are present:
 
 ```python
 # After all signal checks, before the signals guard:

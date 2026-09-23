@@ -19,7 +19,7 @@
 | Journal | Skill | Signals found |
 |---------|-------|---------------|
 | `ocas-custodian/2026-05-30/light-2026-05-30-200000.json` | custodian | Escalation (tier3: Nous payment error, MCP failures, HTTP 429s) |
-| `ocas-elephas/2026-05-31/run_50dc0862bf1f.json` | elephas | No signal -- flat schema, no summary/status fields |
+| `chronicle/2026-05-31/run_50dc0862bf1f.json` | chronicle | No signal -- flat schema, no summary/status fields |
 | `ocas-spot/2026-05-31/sweep_20260531_1900.json` | spot | No signal -- flat sweep schema |
 | `ocas-spot/2026-05-31/sweep_20260531_2100.json` | spot | No signal -- flat sweep schema |
 | `ocas-weave/2026-05-31/r_cron001.json` | weave | No signal -- flat schema |
@@ -63,4 +63,4 @@ These skill journals use flat/non-standard schemas with **no extractable Praxis 
 - `ocas-mentor` / `ocas-forge`: `decision`/`action`/`metrics`/`okr_evaluation` -- no `summary` string, no `execution_result`
 - `ocas-reach`: flat `skill`/`kind`/`action`/`outcome`/`result_meta`
 - `ocas-spot`: flat `records_checked`/`sweep_result`/`checks`
-- `ocas-elephas`: no `summary` field at all
+- `chronicle`: no `summary` field at all

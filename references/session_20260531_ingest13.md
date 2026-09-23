@@ -5,7 +5,7 @@
 - **Journals scanned**: 132 on disk (5,085 evaluated)
 - **New journals**: 3
 - **Journals with signals**: 1 (ocas-finch)
-- **Routine/no-op journals**: 2 (ocas-elephas success, ocas-lucid skipped)
+- **Routine/no-op journals**: 2 (chronicle success, ocas-lucid skipped)
 - **Events recorded**: 3
 - **Lessons extracted**: 2 (1 high confidence, 1 low/proposed)
 - **Shifts activated**: 1 (finch HTTP 429 stagger)

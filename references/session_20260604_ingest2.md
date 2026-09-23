@@ -16,8 +16,8 @@
 | ocas-custodian/esc-run-20260604-1514.json | no signal |
 | ocas-dispatch/dispatch_draft_20260604_220000Z.json | no signal |
 | ocas-dispatch/dispatch_draft_20260604_214800Z.json | no signal |
-| ocas-elephas/run_cron_20260604_215557.json | no signal |
-| ocas-elephas/run_cron_20260604_222515.json | no signal (appeared mid-scan) |
+| chronicle/run_cron_20260604_215557.json | no signal |
+| chronicle/run_cron_20260604_222515.json | no signal (appeared mid-scan) |
 | ocas-spot/sweep_20260604_1453.json | no signal |
 | ocas-spot/sweep_20260604_1513.json | no signal |
 

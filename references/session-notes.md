@@ -48,7 +48,7 @@
 
 - `session_20260604_ingest1.md` — **Nested signal scan gap**: initial pass only checked top-level fields, missed 5 signals in `findings[].escalation_needed` (custodian) and `sources.*.error_breakdown` (finch). Targeted re-extraction recovered them. Fixed by adding nested scan steps 8+10 to ingest-script-pattern.md checklist. All 9 patterns already had lessons; 0 new lessons/shifts. Cap at 12/12.
 - `session_20260604_ingest2.md` — Compaction step missing from pattern (fixed), os.path.exists() guard added, typo fixes. 8 journals scanned, 1 escalation signal. Cap at 12/12.
-- `session_20260604_ingest3.md` — **Schema-ambiguous journal noise filter gap**: elephas journal with no top-level `status` field fell through noise filter, got incorrectly marked "event_recorded". Fixed with explicit `no_signal` fallback after signal loop. Also documented post-write dedup limitation (drops multiple signals from same journal). 2 journals scanned, 1 escalation event, 1 new lesson (escalation_planning). Cap at 12/12.
+- `session_20260604_ingest3.md` — **Schema-ambiguous journal noise filter gap**: chronicle journal with no top-level `status` field fell through noise filter, got incorrectly marked "event_recorded". Fixed with explicit `no_signal` fallback after signal loop. Also documented post-write dedup limitation (drops multiple signals from same journal). 2 journals scanned, 1 escalation event, 1 new lesson (escalation_planning). Cap at 12/12.
 
 ### 2026-06-14 Sessions
 

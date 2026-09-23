@@ -16,10 +16,10 @@
 - One-off trivia
 - Emotionally loaded but behaviorally vague exchanges
 - Abstract aspirations with no execution consequence
-- Domain facts that belong in normal memory (Elephas)
+- Domain facts that belong in normal memory (Chronicle)
 - **Single events** — still require minimum pattern count before producing a shift (record the event but don't shift behavior on a single data point)
 - **Reinforced stale shifts** — if a shift was recently reinforced, don't extract overlapping lessons that would create duplicate active shifts
-- **Legacy events with unknown signal type** — events with `signal_type` of `"unknown"`, `"?"`, `None`, or `""` are from pre-v3.0 journal schemas. They carry no meaningful failure-phase or error-type information. Skip them during pattern grouping entirely. In production, legacy events from ocas-custodian (42), ocas-elephas (22), and ocas-mentor (12) all had `signal_type: "?"` and generated 3 useless low-confidence lessons per ingest cycle until this filter was added.
+- **Legacy events with unknown signal type** — events with `signal_type` of `"unknown"`, `"?"`, `None`, or `""` are from pre-v3.0 journal schemas. They carry no meaningful failure-phase or error-type information. Skip them during pattern grouping entirely. In production, legacy events from ocas-custodian (42), chronicle (22), and ocas-mentor (12) all had `signal_type: "?"` and generated 3 useless low-confidence lessons per ingest cycle until this filter was added.
 
 ## Elaborative interrogation requirements
 

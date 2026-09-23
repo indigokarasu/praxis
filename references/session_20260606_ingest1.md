@@ -5,7 +5,7 @@ Automated cron run scanning all skill journals for new entries.
 
 ## Journals Processed
 - 9 unevaluated journals found (today + yesterday window)
-- 7 clean (no signals): ocas-forge (×2), ocas-dispatch (×2), ocas-elephas (×2), ocas-spot sweep_20260606_045434
+- 7 clean (no signals): ocas-forge (×2), ocas-dispatch (×2), chronicle (×2), ocas-spot sweep_20260606_045434
 - 3 events recorded from 2 journals
 
 ## Signals Extracted

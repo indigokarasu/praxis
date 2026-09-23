@@ -6,7 +6,7 @@ Ran the Praxis journal ingest cron job at ~14:19 UTC. Fourth ingest run of the d
 
 ## Results
 
-- **6 unevaluated journals** scanned (1 elephas cron run, 3 forge June-12 scans, 2 forge June-14 scans)
+- **6 unevaluated journals** scanned (1 chronicle cron run, 3 forge June-12 scans, 2 forge June-14 scans)
 - **0 new events** — all journals were routine no-op/success
 - **0 new lessons** — all 5 existing lesson groups already cover the event backlog
 - **0 new shifts** — no new proposals, 5/12 active unchanged
@@ -18,7 +18,7 @@ Ran the Praxis journal ingest cron job at ~14:19 UTC. Fourth ingest run of the d
 
 2. **Forge June-14 advance scans**: Two forge journals from June 14 (future-dated) were picked up by the broad filesystem scan. Both were routine no-ops (`result: "no_new_proposals"`, 0 files found). The broad scan pattern correctly catches journals from any date, not just today+yesterday.
 
-3. **Elephas cron journal structure confirmed**: The `run_cron_*.json` schema uses `decision.journals_scanned`, `decision.signals_created`, `decision.candidates_created` fields (not top-level `status`). The ingest script's fallback to check `decision` fields worked correctly — 0 signals_created → no_signal.
+3. **Chronicle cron journal structure confirmed**: The `run_cron_*.json` schema uses `decision.journals_scanned`, `decision.signals_created`, `decision.candidates_created` fields (not top-level `status`). The ingest script's fallback to check `decision` fields worked correctly — 0 signals_created → no_signal.
 
 4. **Forge journal scan structure confirmed**: Uses `result` field (not `status`), with values like `"no_new_proposals"`. No top-level `status`, `summary`, or `decision` keys. The ingest script correctly handled this non-standard schema.
 

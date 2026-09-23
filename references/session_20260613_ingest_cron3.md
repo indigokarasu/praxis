@@ -14,8 +14,8 @@ Steady-state ingest run. 8 unevaluated journals scanned. 3 new events from finch
 | `ocas-forge/2026-06-13/r_20260613_journal-scan-1781327521.json` | no_signal |
 | `ocas-forge/2026-06-12/r_20260612_journal-scan-1781326280.json` | no_signal |
 | `ocas-forge/2026-06-12/r_20260612_journal-scan-1781326029.json` | no_signal |
-| `ocas-elephas/2026-06-13/run_7a9a8fb7d04e.json` | no_signal |
-| `ocas-elephas/2026-06-13/run_84a926fc699e.json` | no_signal |
+| `chronicle/2026-06-13/run_7a9a8fb7d04e.json` | no_signal |
+| `chronicle/2026-06-13/run_84a926fc699e.json` | no_signal |
 | `ocas-spot/2026-06-12/sweep_20260612_214700.json` | no_signal |
 | `ocas-spot/2026-06-12/spot-20260612-220217.json` | no_signal |
 | `ocas-finch/2026-06-13/scan-0506.json` | **event_recorded** (3 signal types) |

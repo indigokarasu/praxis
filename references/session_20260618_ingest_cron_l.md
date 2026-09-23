@@ -24,7 +24,7 @@
 - custodian_fix (1): Tier 1 auto-fix — removed null-valued keys from config.yaml
 - escalation_resolved (1): subdirectory_hints_home_dir self-resolved
 - low_coverage (5): Mentor evaluation coverage below 0.25 threshold
-- stale_counters (2): Stale failure counters on elephas:ingest and weave
+- stale_counters (2): Stale failure counters on chronicle:ingest and weave
 - user_action_required (1): 2 issues need user confirmation
 
 ## New Lessons (3)

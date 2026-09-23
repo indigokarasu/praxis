@@ -15,7 +15,7 @@
 ### 2. ocas-finch `scan-1810`
 - **Signal:** bones:paper-trade Telegram delivery failure — "message too long"
 - **Pattern:** NEW — first occurrence of response-phase content-length delivery failure
-- **Other signals:** Google OAuth expired (6+ days), elephas:ingest timeout — both already tracked
+- **Other signals:** Google OAuth expired (6+ days), chronicle:ingest timeout — both already tracked
 - **Decision:** Record failure event (response phase, user relevance). Hold for pattern (need 1 more occurrence)
 
 ### 3. ocas-spot `sweep_20260530_181000`

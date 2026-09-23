@@ -20,7 +20,7 @@
 1. `system/escalation` — Google OAuth token missing (Tier 3 confirmed)
 2. `ocas-finch/escalation` — finch:weekly 401 reconfirmed (Tier 3)
 3. `system/error` — HTTP 429 on 4 cron jobs (7-10 AM burst)
-4. `system/error` — MCP mempalace/stealth-browser persistent failure
+4. `system/error` — MCP the memory store/stealth-browser persistent failure
 5. `ocas-sands/observation` — morning brief failed, ClosedResourceError
 6. `ocas-sands/escalation` — conflict scan degraded 46+ days
 7. `ocas-sands/escalation` — morning brief failed (cross-skill corroboration)

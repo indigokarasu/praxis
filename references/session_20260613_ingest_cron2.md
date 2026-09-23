@@ -10,7 +10,7 @@ Ran two-pass journal ingest: first with standard today+yesterday window, then a 
 All 6 journals from 2026-06-12/13 were routine no-ops:
 - 3 ocas-forge journal-scans (no unprocessed files)
 - 2 ocas-spot watch sweeps (no new availability)
-- 1 ocas-elephas ingest (0 signals created)
+- 1 chronicle ingest (0 signals created)
 
 No new behavioral signals from current window.
 

@@ -9,7 +9,7 @@ Two-pass ingest run. First pass missed signals due to incomplete finch `sources.
 
 ## Journals Scanned
 
-18 files across 5 skills (ocas-elephas, ocas-finch, ocas-forge, ocas-mentor, ocas-spot). 11 unevaluated on first pass, all re-processed on second pass.
+18 files across 5 skills (chronicle, ocas-finch, ocas-forge, ocas-mentor, ocas-spot). 11 unevaluated on first pass, all re-processed on second pass.
 
 ## Findings
 

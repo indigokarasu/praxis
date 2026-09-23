@@ -14,7 +14,7 @@ Steady-state ingest run. All 11 skill journal files on disk were already evaluat
 |-------|-------|--------|
 | ocas-forge | 5 | All no_signal (routine no-op scans: no_files_found, scan_complete_no_action, no-op) |
 | ocas-spot | 4 | 1 event_recorded (persistent_platform_failure from sweep_20260612_221716), 3 no_signal |
-| ocas-elephas | 1 | no_signal |
+| chronicle | 1 | no_signal |
 | ocas-praxis | 1 | skipped (self-reference) |
 
 ## Events
