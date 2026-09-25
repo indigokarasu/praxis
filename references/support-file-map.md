@@ -16,7 +16,6 @@
 | `references/self-update-praxis.md` | Before running praxis.update |
 | `references/inline-examples.md` | Before writing/repairing `ingest_state.json` (bootstrap vs null/empty-string fix), Bug 2 noise-lesson cleanup, or lesson dedup — holds the exact code snippets extracted from SKILL.md |
 | `templates/dispatch_ingest_template.py` | Copy-and-adapt template for dispatch-triggered Praxis ingest |
-| `scripts/debrief_20260617.py` | When generating daily debrief; production-proven template |
 
 ## Session Notes (historical reference)
 
@@ -230,5 +229,4 @@ For other session-specific gotchas and incident reports, see `references/session
 | `references/session_20260622_ingest_cron_c.md` | Session 2026-06-22 Cron Ingest C — Findings |
 | `references/session_20260625_ingest.md` | Praxis Ingest — 2026-06-25 Session Notes |
 | `references/supplemental-ingest-after-dispatch.md` | Supplemental Ingest After Dispatch |
-| `scripts/shift_activate_20260617.py` | Shift activation from valid lessons — merge-before-cap, noise filter, quality validation. |
 | `scripts/shift_cleanup_20260617.py` | Shift cleanup — expire malformed shifts, merge overlaps, enforce cap. Run after ingest to fix data quality ... |

@@ -17,7 +17,6 @@ NEVER use write_file on JSONL — this script uses open(..., 'a').
 
 import json
 import os
-import glob
 from datetime import datetime, timezone, timedelta
 from collections import Counter, defaultdict
 
