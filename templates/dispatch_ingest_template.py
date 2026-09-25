@@ -146,6 +146,7 @@ def main():
                 seen_ids.add(jid + ".json")
 
     new_journals = []
+    pending_ids = set()  # in-flight dedup: JOURNALS_DIRS may list the same physical dir twice (commons ≡ profile commons)
     for jdir in JOURNALS_DIRS:
         if not os.path.isdir(jdir):
             continue
@@ -174,7 +175,10 @@ def main():
                         last_ingest_dt = datetime.fromisoformat(last_ingest_run.replace("Z", "+00:00"))
                         # Use >= not >: journals written at the exact same second as last_ingest_run
                         # should still be captured. The eval dedup prevents re-processing.
+                        if journal_id in pending_ids:
+                            continue
                         if datetime.fromtimestamp(mtime, tz=timezone.utc) >= last_ingest_dt:
+                            pending_ids.add(journal_id)
                             new_journals.append((full_path, journal_id, skill_dir))
                     except (OSError, ValueError):
                         pass
