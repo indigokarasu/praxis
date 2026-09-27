@@ -124,7 +124,12 @@ def main():
                 data = json.load(f)
             if isinstance(data, dict):
                 # Custodian light-scan classification
-                nar = data.get('not_activity_reason', '')
+                # Journals may carry an explicit JSON null for not_activity_reason;
+                # .get(k, '') only defaults when the key is absent, so coerce
+                # None -> '' (and non-str) before any string method.
+                nar = data.get('not_activity_reason') or ''
+                if not isinstance(nar, str):
+                    nar = str(nar)
                 if 'all transient' in nar.lower() or 'all...are transient' in nar.lower():
                     action = 'backfill_no_signal'
                     reason = 'custodian: all errors transient/stale'
