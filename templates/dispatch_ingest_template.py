@@ -125,6 +125,18 @@ def main():
     else:
         last_ingest_run = state.get("last_ingest_run", "2020-01-01T00:00:00+00:00")
 
+    # Normalise last_ingest_run to an ISO string. Other Praxis writers (and past
+    # dispatch closeouts) have left an epoch FLOAT in this field; the template
+    # calls .replace() on it, and AttributeError is not caught by the
+    # (OSError, ValueError) guard below, so a float crashed the whole ingest
+    # rather than skipping one journal. Normalise once, here, so both the
+    # .replace() at the mtime comparison and the print at the end are safe.
+    if isinstance(last_ingest_run, (int, float)) and not isinstance(last_ingest_run, bool):
+        last_ingest_run = datetime.fromtimestamp(float(last_ingest_run), tz=timezone.utc).isoformat()
+        print(f"Coerced numeric last_ingest_run -> {last_ingest_run}")
+    elif isinstance(last_ingest_run, str) and last_ingest_run.strip() == "":
+        last_ingest_run = "2020-01-01T00:00:00+00:00"
+
     seen_ids = set()
     if os.path.exists(EVAL_FILE):
         with open(EVAL_FILE) as f:
