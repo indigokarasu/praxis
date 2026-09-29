@@ -1,23 +1,20 @@
 name: Repository discoverability bootstrap
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    paths:
+      - .github/workflows/discoverability-bootstrap.yml
 permissions:
   contents: write
   issues: write
 
 jobs:
-  metadata:
+  discoverability:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
     steps:
-      - name: Repository description and topics
-        run: |
-          gh api --method PATCH "repos/$REPO" -f description='Praxis: behavioral refinement loop — measures skill outcomes against baselines and promotes improvements.'
-          gh api --method PUT "repos/$REPO/topics" -H "Accept: application/vnd.github+json" -F 'names[]=agent-skills' -F 'names[]=ai-agent' -F 'names[]=behavior' -F 'names[]=claude' -F 'names[]=ocas' -F 'names[]=openclaw' -F 'names[]=refinement' -F 'names[]=self-improvement'
-
       - name: Standard labels
         continue-on-error: true
         run: |
