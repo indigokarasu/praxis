@@ -2,7 +2,7 @@
 license: MIT
 name: ocas-praxis
 description: 'Bounded behavioral refinement loop. Records outcomes, extracts micro-lessons from repeated patterns, consolidates them into capped active behavior shifts, applies shifts at runtime, and generates plain-language debriefs. Use for recording task outcomes, extracting lessons from repeated patterns, managing active behavior shifts, generating runtime briefs, or producing debriefs. Not for: general memory (use Chronicle), preference tracking (use Taste), real-time task execution, content generation, system health monitoring (use Custodian), or skill evaluation scoring (use Mentor).'
-source: https://github.com/<agent-handle>/praxis
+source: https://github.com/indigokarasu/praxis
 includes:
 - references/**
 - scripts/**
